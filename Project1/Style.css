@@ -8,5 +8,6 @@ h1 {
 table {
   align-content: center;
   align-items: center;
+  border-style: solid yellow;
   border-radius:5px 0 5px 0;
 }
