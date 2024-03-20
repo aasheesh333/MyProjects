@@ -10,7 +10,7 @@ body {
   justify-content: center;
   align-items: center;
   background-color: white;
-  width: 95%;
+  width: 550px;
   height: 100%;
   margin-top: 20px;
   border-radius:10px;
@@ -20,9 +20,23 @@ body {
   overflow: hidden;
   margin: 0;
   background-color: black;
+  border-radius: 10px;
 }
 #image-card img {
   width:100%;
   padding-top:2px;
   object-fit: cover;
+}
+#button-div {
+  margin: 10px 10px 0 10px;
+}
+button:nth-child(2){
+  margin: 0px 50px 0px 5px;
+}
+
+button{
+  border-radius: 30px;
+  border-width: 1px;
+  height: 30px;
+  background-color: rgb(250, 249, 249);
 }
