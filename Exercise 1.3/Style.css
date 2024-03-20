@@ -18,6 +18,7 @@ body {
 }
 #image-card{
   overflow: hidden;
+  margin: 0;
 }
 #image-card img {
   width: 95%;
