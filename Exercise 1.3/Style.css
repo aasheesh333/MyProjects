@@ -19,6 +19,7 @@ body {
 #image-card{
   overflow: hidden;
   margin: 0;
+  background-color: black;
 }
 #image-card img {
   width: 95%;
