@@ -1,0 +1,10 @@
+body {
+  margin: 0;
+}
+
+#main-card {
+  margin: auto;
+  align-content: center;
+  justify-content: center;
+  align-items: center;
+}
