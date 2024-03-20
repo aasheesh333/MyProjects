@@ -1,5 +1,6 @@
 body {
   margin: 0;
+  background-color: #b3b3b3;
 }
 
 #main-card {
@@ -7,5 +8,5 @@ body {
   align-content: center;
   justify-content: center;
   align-items: center;
-  background-color: #d2cdcd;
+  background-color: white;
 }
