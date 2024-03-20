@@ -1,6 +1,7 @@
 body {
   margin: 0;
   background-color: #b3b3b3;
+  display: flex;
 }
 
 #main-card {
@@ -10,4 +11,5 @@ body {
   align-items: center;
   background-color: white;
   margin-top: 50%;
+  
 }
