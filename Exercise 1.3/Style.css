@@ -1,7 +1,6 @@
 body {
   margin: 0;
   background-color: #b3b3b3;
-  display: flex;
 }
 
 #container {
@@ -12,9 +11,6 @@ body {
 }
 #main-card {
   margin: auto;
-  align-content: center;
-  justify-content: center;
-  align-items: center;
   background-color: white;
   width: 280px;
   height: 100%;
