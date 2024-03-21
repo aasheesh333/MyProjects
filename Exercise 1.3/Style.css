@@ -42,3 +42,7 @@ button{
   height: 30px;
   background-color: rgb(250, 249, 249);
 }
+
+#text h1 {
+  padding: 2px;
+}
