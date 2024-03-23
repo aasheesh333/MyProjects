@@ -1,0 +1,37 @@
+:root {
+  --c1 :rgb(0, 0, 0);
+  --c2:white;
+}
+
+body {
+    margin: 0px;
+    padding: 0px;
+    background-color: aquamarine;
+}
+
+ul{
+    list-style-type: none;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+li {
+    float: left;
+}
+
+a {
+    display: block;
+    text-decoration: none;
+    padding: 20px;
+    color: var(--c2); 
+    border-radius: 19px;
+}
+
+a:hover {
+   background-color: aquamarine;
+}
+
+#navbar {
+    background-color: var(--c1);
+}
