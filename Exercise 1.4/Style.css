@@ -1,19 +1,17 @@
 :root {
-  --c1 :rgb(0, 0, 0);
-  --c2:white;
+    --color:rgb(0, 0, 0);
+    --color1:rgb(224, 206, 206);
 }
 
-body {
+* {
     margin: 0px;
     padding: 0px;
-    background-color: aquamarine;
 }
 
-ul{
+ul {
     list-style-type: none;
     overflow: hidden;
-    margin: 0;
-    padding: 0;
+    background-color: var(--color);
 }
 
 li {
@@ -21,17 +19,12 @@ li {
 }
 
 a {
-    display: block;
+    color: var(--color1);
     text-decoration: none;
     padding: 20px;
-    color: var(--c2); 
-    border-radius: 19px;
+    display: block;
 }
 
 a:hover {
-   background-color: aquamarine;
-}
-
-#navbar {
-    background-color: var(--c1);
+    background-color: blanchedalmond;
 }
