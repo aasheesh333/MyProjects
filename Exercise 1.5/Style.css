@@ -2,3 +2,6 @@ body {
     background-color: rgb(110, 134, 134);
 }
 
+ul {
+  list-style: none;
+}
