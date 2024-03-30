@@ -1,12 +1,57 @@
 body {
     background-color: rgb(110, 134, 134);
+    margin: 0px;
+    padding: 0px;
 }
 
 ul {
-<<<<<<< HEAD
-   text-decoration-style: ;
-=======
-  list-style: none;
-  display: inline;
->>>>>>> c84c89982ee531633d3030fd3c40afe0800a513a
+   list-style: none;
+   margin: 0px;
+   padding: 20px;
+   background-color: bisque;
+   padding: 20px 20px 20px 20px;
+
 }
+
+li {
+    display: inline;
+    padding: 20px 20px 20px 20px;
+
+}
+
+a {
+    text-decoration: none;
+    color: blue;
+}
+
+a:hover {
+    background-color: aquamarine;
+}
+
+a:visited {
+    color: black;
+}
+
+#main {
+    height: 600px;
+    background-color: azure;
+    display: flex;
+    align-items: center;
+    column-gap: 20px;    
+    justify-content: center;
+}
+
+section {
+    background-color: rgb(148, 117, 71);
+}
+
+#s1 {
+    height: 60%;
+    width: 45%;
+}
+
+#s2 {
+    height: 60%;
+    width: 45%;
+}
+
