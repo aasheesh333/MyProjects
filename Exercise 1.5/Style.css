@@ -3,5 +3,10 @@ body {
 }
 
 ul {
+<<<<<<< HEAD
    text-decoration-style: ;
+=======
+  list-style: none;
+  display: inline;
+>>>>>>> c84c89982ee531633d3030fd3c40afe0800a513a
 }
