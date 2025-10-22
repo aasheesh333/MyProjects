@@ -15,6 +15,23 @@
     </header>
     <main>
         <section class="downloader">
+            <div class="platform-selector-container">
+                <div class="platform-slider">
+                    <button class="platform-icon active" data-platform="youtube">YouTube</button>
+                    <button class="platform-icon" data-platform="instagram">Instagram</button>
+                    <button class="platform-icon" data-platform="facebook">Facebook</button>
+                    <button class="platform-icon" data-platform="tiktok">TikTok</button>
+                    <button class="platform-icon" data-platform="snapchat">Snapchat</button>
+                    <button class="platform-icon" data-platform="vimeo">Vimeo</button>
+                    <button class="platform-icon" data-platform="x-twitter">X (Twitter)</button>
+                    <button class="platform-icon" data-platform="threads">Threads</button>
+                    <button class="platform-icon" data-platform="reddit">Reddit</button>
+                    <button class="platform-icon" data-platform="pinterest">Pinterest</button>
+                    <button class="platform-icon premium" data-platform="shutterstock">Shutterstock</button>
+                    <button class="platform-icon premium" data-platform="viddyoze">Viddyoze</button>
+                    <button class="platform-icon premium" data-platform="storyblocks">Storyblocks</button>
+                </div>
+            </div>
             <h2>Paste your link here</h2>
             <div class="input-group">
                 <input type="url" id="url-input" placeholder="https://example.com/video">
@@ -22,41 +39,25 @@
             </div>
             <div class="options">
                 <div class="option-group">
-                    <label for="platform-select">Platform:</label>
-                    <select id="platform-select">
-                        <optgroup label="Free Platforms">
-                            <option value="youtube" selected>YouTube</option>
-                            <option value="instagram">Instagram</option>
-                            <option value="facebook">Facebook</option>
-                            <option value="tiktok">TikTok</option>
-                            <option value="snapchat">Snapchat</option>
-                            <option value="vimeo">Vimeo</option>
-                            <option value="x-twitter">X (Twitter)</option>
-                            <option value="threads">Threads</option>
-                            <option value="reddit">Reddit</option>
-                            <option value="pinterest">Pinterest</option>
-                        </optgroup>
-                        <optgroup label="Premium Platforms (Sign-up required)">
-                            <option value="shutterstock">Shutterstock</option>
-                            <option value="viddyoze">Viddyoze</option>
-                            <option value="storyblocks">Storyblocks</option>
-                        </optgroup>
-                    </select>
-                </div>
-                <div class="option-group">
                     <label for="type-select">Content Type:</label>
                     <select id="type-select">
+                        <option value="mp3" selected>MP3</option>
                         <option value="mp4">MP4</option>
-                        <option value="mp3">MP3</option>
                     </select>
                 </div>
                 <div class="option-group" id="quality-group">
                     <label for="quality-select">Quality:</label>
                     <select id="quality-select">
-                        <option value="1080p">1080p</option>
-                        <option value="720p">720p</option>
-                        <option value="480p">480p</option>
-                        <option value="360p">360p</option>
+                        <!-- MP3 Bitrates -->
+                        <option value="320kb/s" selected>320kb/s</option>
+                        <option value="256kb/s">256kb/s</option>
+                        <option value="128kb/s">128kb/s</option>
+                        <option value="96kb/s">96kb/s</option>
+                        <!-- MP4 Resolutions (will be shown/hidden by JS) -->
+                        <option value="1080p" style="display: none;">1080p</option>
+                        <option value="720p" style="display: none;">720p</option>
+                        <option value="480p" style="display: none;">480p</option>
+                        <option value="360p" style="display: none;">360p</option>
                     </select>
                 </div>
             </div>
