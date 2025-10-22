@@ -1,0 +1,114 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+header {
+    background-color: #333;
+    color: #fff;
+    padding: 1rem;
+    text-align: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+nav {
+    float: right;
+}
+
+.button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+main {
+    padding: 2rem;
+}
+
+.downloader, .pricing, .signup, .download {
+    background-color: #fff;
+    padding: 2rem;
+    border-radius: 5px;
+    max-width: 800px;
+    margin: auto;
+}
+
+.input-group {
+    display: flex;
+    margin-bottom: 1rem;
+}
+
+#url-input {
+    flex-grow: 1;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 5px 0 0 5px;
+}
+
+#convert-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 0 5px 5px 0;
+}
+
+.options {
+    display: flex;
+    justify-content: space-between;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.pricing-container {
+    display: flex;
+    justify-content: space-around;
+    gap: 1rem;
+}
+
+.plan {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 1rem;
+    text-align: center;
+    flex: 1;
+}
+
+.plan h3 {
+    margin-top: 0;
+}
+
+.price {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.google-signup {
+    background-color: #db4437;
+}
+
+footer {
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    padding: 1rem;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}

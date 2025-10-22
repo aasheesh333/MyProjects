@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusDown - All in One Downloader</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <header>
+        <h1>JusDown</h1>
+        <nav>
+            <a href="signup.html" class="button">Sign Up</a>
+        </nav>
+    </header>
+    <main>
+        <section class="downloader">
+            <h2>Paste your link here</h2>
+            <div class="input-group">
+                <input type="url" id="url-input" placeholder="https://example.com/video">
+                <button id="convert-btn">Convert</button>
+            </div>
+            <div class="options">
+                <div class="option-group">
+                    <label for="platform-select">Platform:</label>
+                    <select id="platform-select">
+                        <optgroup label="Free Platforms">
+                            <option value="youtube" selected>YouTube</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="facebook">Facebook</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="snapchat">Snapchat</option>
+                            <option value="vimeo">Vimeo</option>
+                            <option value="x-twitter">X (Twitter)</option>
+                            <option value="threads">Threads</option>
+                            <option value="reddit">Reddit</option>
+                            <option value="pinterest">Pinterest</option>
+                        </optgroup>
+                        <optgroup label="Premium Platforms (Sign-up required)">
+                            <option value="shutterstock">Shutterstock</option>
+                            <option value="viddyoze">Viddyoze</option>
+                            <option value="storyblocks">Storyblocks</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="option-group">
+                    <label for="type-select">Content Type:</label>
+                    <select id="type-select">
+                        <option value="mp4">MP4</option>
+                        <option value="mp3">MP3</option>
+                    </select>
+                </div>
+                <div class="option-group" id="quality-group">
+                    <label for="quality-select">Quality:</label>
+                    <select id="quality-select">
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                        <option value="360p">360p</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 JusDown. All rights reserved.</p>
+    </footer>
+    <script src="static/script.js"></script>
+</body>
+</html>
