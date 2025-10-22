@@ -1,36 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Poppins', Arial, sans-serif;
     margin: 0;
-    background-color: #f4f4f4;
-    color: #333;
+    background-color: #f8f9fa;
+    color: #343a40;
+    padding-top: 80px; /* Space for the fixed header */
 }
 
 header {
-    background-color: #333;
-    color: #fff;
-    padding: 1rem;
-    text-align: center;
+    background-color: #ffffff;
+    color: #343a40;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    box-sizing: border-box;
 }
 
 header h1 {
     margin: 0;
-}
-
-nav {
-    float: right;
+    font-size: 1.8rem;
+    font-weight: 600;
 }
 
 .button {
-    background-color: #4CAF50;
+    background-color: #007bff;
     color: white;
     padding: 10px 20px;
     text-align: center;
     text-decoration: none;
     display: inline-block;
     font-size: 16px;
-    margin: 4px 2px;
+    border: none;
     cursor: pointer;
-    border-radius: 5px;
+    border-radius: 25px;
+    transition: background-color 0.3s ease;
+}
+
+.button:hover {
+    background-color: #0056b3;
 }
 
 main {
@@ -39,53 +54,67 @@ main {
 
 .downloader {
     background-color: #fff;
-    padding: 2rem;
-    border-radius: 5px;
+    padding: 2.5rem;
+    border-radius: 15px;
     max-width: 800px;
     margin: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .platform-selector-container {
     overflow-x: auto;
     white-space: nowrap;
-    margin-bottom: 2rem;
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    margin-bottom: 2.5rem;
+    padding-bottom: 10px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 .platform-selector-container::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+    display: none;
 }
 
 .platform-slider {
-    display: inline-block;
+    display: inline-flex;
+    gap: 15px;
 }
 
 .platform-icon {
-    background-color: #eee;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 10px 15px;
-    margin-right: 10px;
+    background-color: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 12px 20px;
     cursor: pointer;
-    font-size: 16px;
-    display: inline-block;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    transition: all 0.2s ease-in-out;
 }
 
 .platform-icon:hover {
-    background-color: #ddd;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
 .platform-icon.active {
-    background-color: #4CAF50;
+    background-color: #007bff;
     color: white;
-    border-color: #4CAF50;
+    border-color: #007bff;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.4);
 }
 
 .platform-icon.premium {
-    background-color: #f0ad4e;
-    color: white;
-    border-color: #eea236;
+    background-color: #ffc107;
+    color: #212529;
+    border-color: #ffc107;
+}
+
+h2 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    color: #495057;
 }
 
 .input-group {
@@ -95,23 +124,40 @@ main {
 
 #url-input {
     flex-grow: 1;
-    padding: 0.5rem;
-    border: 1px solid #ccc;
-    border-radius: 5px 0 0 5px;
+    padding: 1rem;
+    border: 2px solid #ced4da;
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+}
+
+#url-input:focus {
+    outline: none;
+    border-color: #007bff;
+}
+
+.downloader-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
 }
 
 #convert-btn {
-    background-color: #4CAF50;
+    background-color: #007bff;
     color: white;
     border: none;
-    padding: 0.5rem 1rem;
+    padding: 1rem 1.5rem;
     cursor: pointer;
-    border-radius: 0 5px 5px 0;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: background-color 0.3s ease;
+    height: fit-content;
 }
 
-.options {
-    display: flex;
-    justify-content: space-between;
+#convert-btn:hover {
+    background-color: #0056b3;
 }
 
 .option-group {
@@ -119,13 +165,120 @@ main {
     flex-direction: column;
 }
 
+.option-group label {
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+select {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 2px solid #ced4da;
+    background-color: #fff;
+    font-size: 1rem;
+}
+
+.content-wrapper {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.info-section, .supported-sites {
+    background-color: #fff;
+    padding: 2.5rem;
+    border-radius: 15px;
+    margin-top: 2rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.info-section h3 {
+    margin-top: 2rem;
+}
+
+.info-section ul {
+    list-style: none;
+    padding: 0;
+}
+
+.info-section ul li {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.info-section ul li strong {
+    color: #007bff;
+}
+
+.sites-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 1rem;
+    text-align: center;
+}
+
+.sites-grid span {
+    background-color: #f1f3f5;
+    padding: 0.8rem;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
 footer {
-    background-color: #333;
+    background-color: #343a40;
     color: #fff;
     text-align: center;
-    padding: 1rem;
+    padding: 2rem;
     position: relative;
     bottom: 0;
     width: 100%;
-    margin-top: 2rem;
+    margin-top: 4rem;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    body {
+        padding-top: 60px;
+    }
+
+    header {
+        padding: 0.5rem 1rem;
+    }
+
+    header h1 {
+        font-size: 1.5rem;
+    }
+
+    .button {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+
+    main {
+        padding: 1rem;
+    }
+
+    .downloader, .info-section, .supported-sites {
+        padding: 1.5rem;
+    }
+
+    .platform-slider {
+        gap: 10px;
+    }
+
+    .platform-icon {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+
+    .downloader-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #convert-btn {
+        width: 100%;
+        padding: 1rem;
+    }
 }
