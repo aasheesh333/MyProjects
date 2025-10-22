@@ -73,12 +73,48 @@ document.addEventListener('DOMContentLoaded', () => {
         typeSelect.addEventListener('change', updateQualityOptions);
 
         convertBtn.addEventListener('click', () => {
-            const urlInput = document.getElementById('url-input').value;
-            if (urlInput) {
-                window.location.href = 'download.html';
-            } else {
+            const url = document.getElementById('url-input').value;
+            const type = typeSelect.value;
+            const quality = qualitySelect.value;
+
+            if (!url) {
                 alert('Please paste a link first!');
+                return;
             }
+
+            // Disable button and show loading state
+            convertBtn.disabled = true;
+            convertBtn.textContent = 'Converting...';
+
+            fetch('/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url, type, quality }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Try to get the error message from the server's JSON response
+                    return response.json().then(err => { throw new Error(err.error || 'An unknown error occurred.') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.download_url) {
+                    // Store the URL for the next page and redirect
+                    sessionStorage.setItem('downloadUrl', data.download_url);
+                    window.location.href = 'download.html';
+                } else {
+                    throw new Error(data.error || 'Could not retrieve the download link.');
+                }
+            })
+            .catch(error => {
+                // Show error message and re-enable the button
+                alert(`Error: ${error.message}`);
+                convertBtn.disabled = false;
+                convertBtn.textContent = 'Convert';
+            });
         });
 
         // Initial setup
@@ -87,13 +123,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (currentPage === 'download.html') {
-        const convertNextBtn = document.getElementById('convert-next-btn');
-        setTimeout(() => {
-            convertNextBtn.style.display = 'inline-block';
-            convertNextBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                window.location.href = 'index.html';
-            });
-        }, 3000);
+        const downloadUrl = sessionStorage.getItem('downloadUrl');
+        const downloadContainer = document.getElementById('download-container');
+
+        if (downloadUrl) {
+            const downloadButton = document.createElement('a');
+            downloadButton.href = downloadUrl;
+            downloadButton.textContent = 'Download Now';
+            downloadButton.className = 'button';
+            downloadButton.setAttribute('download', ''); // This encourages the browser to download the file
+
+            downloadContainer.appendChild(downloadButton);
+        } else {
+            downloadContainer.innerHTML = '<p>Could not find a download link. Please try again.</p>';
+        }
+
+        // Clean up the stored URL
+        sessionStorage.removeItem('downloadUrl');
     }
 });

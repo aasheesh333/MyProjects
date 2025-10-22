@@ -6,6 +6,9 @@ body {
     background-color: #f8f9fa;
     color: #343a40;
     padding-top: 80px; /* Space for the fixed header */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
 header {
@@ -181,6 +184,7 @@ select {
 }
 
 .content-wrapper {
+    flex-grow: 1;
     max-width: 900px;
     margin: 0 auto;
 }
@@ -230,9 +234,6 @@ footer {
     color: #fff;
     text-align: center;
     padding: 2rem;
-    position: relative;
-    bottom: 0;
-    width: 100%;
     margin-top: 4rem;
     box-sizing: border-box;
 }
