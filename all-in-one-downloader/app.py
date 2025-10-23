@@ -40,16 +40,10 @@ def download():
         }
 
         if content_type == 'mp3':
+            # We cannot do post-processing without downloading the file, which is not feasible here.
+            # Instead, we will get the URL for the best available audio-only stream.
+            # The browser will handle the download, and the user's media player will handle playback.
             ydl_opts['format'] = 'bestaudio/best'
-            # Note: When getting a URL for a post-processed format like mp3,
-            # yt-dlp might not be able to provide a direct link without downloading.
-            # This works best when the bestaudio is already mp3.
-            # The logic here assumes yt-dlp will find a suitable direct URL.
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': quality.replace('kb/s', ''), # e.g., '320'
-            }]
         else: # mp4
             # We want the best single file (pre-merged video+audio) that matches the quality.
             # This selector avoids formats that would require merging.
