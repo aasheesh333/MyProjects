@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // This script now only runs on the main page, so no need to check the current page.
     const platformIcons = document.querySelectorAll('.platform-icon');
     const typeSelect = document.getElementById('type-select');
     const qualitySelect = document.getElementById('quality-select');
@@ -9,9 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadStartedSection = document.getElementById('download-started-section');
     const convertNextBtn = document.getElementById('convert-next-btn');
 
+    // New element for the "Converting..." message
+    const convertingSection = document.createElement('section');
+    convertingSection.id = 'converting-section';
+    convertingSection.style.display = 'none';
+    convertingSection.innerHTML = '<h2>Converting...</h2><p>Your file is being processed. Please wait.</p>';
+    downloaderSection.parentNode.insertBefore(convertingSection, downloadStartedSection);
+
     const qualityOptions = {
         mp3: [
-            { value: '320', text: '320kb/s' }, // Values updated to match backend expectation
+            { value: '320', text: '320kb/s' },
             { value: '256', text: '256kb/s' },
             { value: '128', text: '128kb/s' },
             { value: '96', text: '96kb/s' },
@@ -25,18 +31,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const platformsWithoutQuality = ['instagram', 'facebook', 'tiktok', 'snapchat', 'threads', 'pinterest'];
-    let selectedPlatform = 'youtube'; // Default selected platform
+    let selectedPlatform = 'youtube';
 
     function updateQualityOptions() {
         const format = typeSelect.value;
-        qualitySelect.innerHTML = ''; // Clear existing options
+        qualitySelect.innerHTML = '';
         qualityOptions[format].forEach(option => {
             const opt = document.createElement('option');
             opt.value = option.value;
             opt.textContent = option.text;
             qualitySelect.appendChild(opt);
         });
-        // Set a default value after populating
         if (format === 'mp3') {
             qualitySelect.value = '320';
         } else {
@@ -46,14 +51,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handlePlatformSelection(platform) {
         selectedPlatform = platform;
-
         platformIcons.forEach(icon => {
             icon.classList.remove('active');
             if (icon.dataset.platform === platform) {
                 icon.classList.add('active');
             }
         });
-
         if (platformsWithoutQuality.includes(platform)) {
             qualityGroup.style.display = 'none';
         } else {
@@ -64,13 +67,11 @@ document.addEventListener('DOMContentLoaded', () => {
     platformIcons.forEach(icon => {
         icon.addEventListener('click', () => {
             const platform = icon.dataset.platform;
-
             if (icon.classList.contains('premium')) {
                 alert('This is a premium platform. Please sign up to continue.');
                 window.location.href = 'signup.html';
                 return;
             }
-
             handlePlatformSelection(platform);
         });
     });
@@ -88,8 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        convertBtn.disabled = true;
-        convertBtn.textContent = 'Converting...';
+        downloaderSection.style.display = 'none';
+        convertingSection.style.display = 'block';
 
         fetch('/download', {
             method: 'POST',
@@ -126,30 +127,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 URL.revokeObjectURL(objectUrl);
             }, 100);
 
-            downloaderSection.style.display = 'none';
+            convertingSection.style.display = 'none';
             downloadStartedSection.style.display = 'block';
         })
         .catch(error => {
             alert(`Error: ${error.message}`);
-            convertBtn.disabled = false;
-            convertBtn.textContent = 'Convert';
+            downloaderSection.style.display = 'block';
+            convertingSection.style.display = 'none';
         });
     });
 
     convertNextBtn.addEventListener('click', () => {
         const urlInput = document.getElementById('url-input');
-        urlInput.value = ''; // Clear the input field
+        urlInput.value = '';
 
         downloaderSection.style.display = 'block';
         downloadStartedSection.style.display = 'none';
 
-        // Reset the button to its original state
         convertBtn.disabled = false;
         convertBtn.textContent = 'Convert';
     });
 
-
-    // Initial setup
     updateQualityOptions();
     handlePlatformSelection(selectedPlatform);
 });
