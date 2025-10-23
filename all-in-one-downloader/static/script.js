@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadStartedSection = document.getElementById('download-started-section');
     const convertNextBtn = document.getElementById('convert-next-btn');
     const urlInput = document.getElementById('url-input');
+    const infoSection = document.querySelector('.info-section');
+    const supportedSites = document.querySelector('.supported-sites');
 
     const convertingSection = document.createElement('section');
     convertingSection.id = 'converting-section';
@@ -116,12 +118,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         downloaderSection.style.display = 'none';
+        infoSection.style.display = 'none';
+        supportedSites.style.display = 'none';
         convertingSection.style.display = 'block';
 
         fetch('/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, type, quality }),
+            body: JSON.stringify({ url, type, quality, platform: selectedPlatform }),
         })
         .then(response => {
             if (!response.ok) {
@@ -157,9 +161,12 @@ document.addEventListener('DOMContentLoaded', () => {
             downloadStartedSection.style.display = 'block';
         })
         .catch(error => {
-            alert(`Error: ${error.message}`);
+            // Display the specific error message from the server
+            alert(error.message);
             urlInput.value = '';
             downloaderSection.style.display = 'block';
+            infoSection.style.display = 'block';
+            supportedSites.style.display = 'block';
             convertingSection.style.display = 'none';
         });
     });
@@ -167,6 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
     convertNextBtn.addEventListener('click', () => {
         urlInput.value = '';
         downloaderSection.style.display = 'block';
+        infoSection.style.display = 'block';
+        supportedSites.style.display = 'block';
         downloadStartedSection.style.display = 'none';
         convertBtn.disabled = false;
         convertBtn.textContent = 'Convert';
