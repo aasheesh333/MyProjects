@@ -1,72 +1,91 @@
-from flask import Flask, send_from_directory, request, jsonify
+from flask import Flask, send_from_directory, request, jsonify, send_file
 import os
 import yt_dlp
+import shutil
+import uuid
 
-# Initialize the Flask app
-# The static_folder is set to the current directory to serve index.html at the root
-# and other files like signup.html, etc.
+# Create a temporary directory for downloads if it doesn't exist
+TEMP_DIR = os.path.join(os.getcwd(), 'temp_downloads')
+if not os.path.exists(TEMP_DIR):
+    os.makedirs(TEMP_DIR)
+
 app = Flask(__name__, static_folder='.', static_url_path='')
 
-# Route for the root URL to serve index.html
 @app.route('/')
 def serve_index():
     return send_from_directory('.', 'index.html')
 
-# Generic route to serve other HTML files like signup.html, download.html
 @app.route('/<path:filename>')
 def serve_static_files(filename):
-    # Ensure we only serve HTML files this way to avoid conflicts
     if filename.endswith('.html'):
         return send_from_directory('.', filename)
-    # Let Flask's default static file handling take care of other assets like css/js
     return app.send_static_file(filename)
 
 @app.route('/download', methods=['POST'])
 def download():
     data = request.get_json()
     url = data.get('url')
-    content_type = data.get('type', 'mp4') # Default to mp4 if not provided
+    content_type = data.get('type', 'mp4')
     quality = data.get('quality')
 
     if not url:
         return jsonify({'error': 'URL is required'}), 400
 
+    # Generate a unique directory for this request to avoid filename conflicts
+    request_dir = os.path.join(TEMP_DIR, str(uuid.uuid4()))
+    os.makedirs(request_dir)
+
     try:
-        # Configure yt-dlp options based on user selection
+        # --- 1. Download the file using yt-dlp ---
         ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True, # We only want the URL, not to download the file
+            'outtmpl': os.path.join(request_dir, '%(title)s.%(ext)s'),
         }
 
         if content_type == 'mp3':
-            # We cannot do post-processing without downloading the file, which is not feasible here.
-            # Instead, we will get the URL for the best available audio-only stream.
-            # The browser will handle the download, and the user's media player will handle playback.
             ydl_opts['format'] = 'bestaudio/best'
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': quality.replace('kb/s', ''),
+            }]
         else: # mp4
-            # We want the best single file (pre-merged video+audio) that matches the quality.
-            # This selector avoids formats that would require merging.
             ydl_opts['format'] = f"best[ext=mp4][height<={quality[:-1]}]/best[ext=mp4]/best"
 
-
-        # Extract information
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(url, download=True)
+            original_filepath = ydl.prepare_filename(info)
 
-            # After processing, yt-dlp places the most suitable URL in the top-level 'url' key.
-            # The flawed logic of picking from the 'formats' list is removed.
-            download_url = info.get('url')
-
-        if download_url:
-            return jsonify({'download_url': download_url})
+        # Determine the final converted filepath
+        if content_type == 'mp3':
+            # yt-dlp changes the extension to .mp3 after conversion
+            final_filepath = os.path.splitext(original_filepath)[0] + '.mp3'
         else:
-            return jsonify({'error': 'Could not find a suitable download link.'}), 500
+            final_filepath = original_filepath
+
+        if not os.path.exists(final_filepath):
+             raise Exception("Converted file not found. Check FFmpeg installation.")
+
+        # --- 2. Prepare the final filename for the user ---
+        title = info.get('title', 'download')
+        ext = 'mp3' if content_type == 'mp3' else info.get('ext', 'mp4')
+        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c in (' ', '-')]).rstrip()
+        final_filename = f"JusDown - {safe_title} - {content_type.upper()} | {quality}.{ext}"
+
+        # --- 3. Send the file and clean up ---
+        return send_file(
+            final_filepath,
+            as_attachment=True,
+            download_name=final_filename,
+            mimetype='audio/mpeg' if content_type == 'mp3' else 'video/mp4'
+        )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        # Clean up the temporary directory for this request
+        if os.path.exists(request_dir):
+            shutil.rmtree(request_dir)
 
 
 if __name__ == '__main__':
-    # Running on port 5001 to avoid potential conflicts with other services
     app.run(debug=True, port=5001)
