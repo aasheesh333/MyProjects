@@ -71,6 +71,7 @@ main {
     background-color: #fff;
     padding: 2.5rem;
     border-radius: 15px;
+    width: 100%;
     max-width: 800px;
     margin: auto;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
@@ -200,6 +201,7 @@ select {
     width: 100%;
     max-width: 900px;
     margin: 0 auto;
+    padding: 0 1rem;
 }
 
 .info-section, .supported-sites {
@@ -294,6 +296,16 @@ footer {
     #convert-btn {
         width: 100%;
         padding: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .downloader, .info-section, .supported-sites {
+        padding: 1rem;
+    }
+
+    header h1 {
+        font-size: 1.3rem;
     }
 }
 

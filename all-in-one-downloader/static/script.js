@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const qualitySelect = document.getElementById('quality-select');
     const qualityGroup = document.getElementById('quality-group');
     const convertBtn = document.getElementById('convert-btn');
+    const downloaderSection = document.getElementById('downloader-section');
+    const downloadStartedSection = document.getElementById('download-started-section');
+    const convertNextBtn = document.getElementById('convert-next-btn');
 
     const qualityOptions = {
         mp3: [
@@ -75,7 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
     typeSelect.addEventListener('change', updateQualityOptions);
 
     convertBtn.addEventListener('click', () => {
-        const url = document.getElementById('url-input').value;
+        const urlInput = document.getElementById('url-input');
+        const url = urlInput.value;
         const type = typeSelect.value;
         const quality = qualitySelect.value;
 
@@ -94,16 +98,12 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(response => {
             if (!response.ok) {
-                // If response is not OK, it's an error from the server (e.g., bad URL)
-                // The backend sends a JSON error object, so we parse it.
                 return response.json().then(errData => {
                     throw new Error(errData.error || 'An unknown server error occurred.');
                 });
             }
-            // If response is OK, the body is the file blob.
-            // We also need the filename from the Content-Disposition header.
             const disposition = response.headers.get('Content-Disposition');
-            let filename = 'download'; // Default filename
+            let filename = 'download';
             if (disposition && disposition.indexOf('attachment') !== -1) {
                 const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
                 const matches = filenameRegex.exec(disposition);
@@ -114,23 +114,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return Promise.all([response.blob(), Promise.resolve(filename)]);
         })
         .then(([blob, filename]) => {
-            // Create a temporary link to trigger the download
             const a = document.createElement('a');
             const objectUrl = URL.createObjectURL(blob);
             a.href = objectUrl;
-            a.download = filename; // Use the filename from the server
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
 
-            // Clean up the temporary link and URL
             setTimeout(() => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(objectUrl);
             }, 100);
 
-            // Reset the button
-            convertBtn.disabled = false;
-            convertBtn.textContent = 'Convert';
+            downloaderSection.style.display = 'none';
+            downloadStartedSection.style.display = 'block';
         })
         .catch(error => {
             alert(`Error: ${error.message}`);
@@ -138,6 +135,19 @@ document.addEventListener('DOMContentLoaded', () => {
             convertBtn.textContent = 'Convert';
         });
     });
+
+    convertNextBtn.addEventListener('click', () => {
+        const urlInput = document.getElementById('url-input');
+        urlInput.value = ''; // Clear the input field
+
+        downloaderSection.style.display = 'block';
+        downloadStartedSection.style.display = 'none';
+
+        // Reset the button to its original state
+        convertBtn.disabled = false;
+        convertBtn.textContent = 'Convert';
+    });
+
 
     // Initial setup
     updateQualityOptions();
