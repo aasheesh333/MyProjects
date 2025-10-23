@@ -7,8 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloaderSection = document.getElementById('downloader-section');
     const downloadStartedSection = document.getElementById('download-started-section');
     const convertNextBtn = document.getElementById('convert-next-btn');
+    const urlInput = document.getElementById('url-input');
 
-    // New element for the "Converting..." message
     const convertingSection = document.createElement('section');
     convertingSection.id = 'converting-section';
     convertingSection.style.display = 'none';
@@ -28,20 +28,45 @@ document.addEventListener('DOMContentLoaded', () => {
             { value: '480p', text: '480p' },
             { value: '360p', text: '360p' },
         ],
+        image: [],
     };
 
-    const platformsWithoutQuality = ['instagram', 'facebook', 'tiktok', 'snapchat', 'threads', 'pinterest'];
+    const platformsWithImage = ['instagram', 'facebook', 'pinterest'];
     let selectedPlatform = 'youtube';
+
+    function updateContentTypeOptions() {
+        const imageOption = typeSelect.querySelector('option[value="image"]');
+        if (platformsWithImage.includes(selectedPlatform)) {
+            if (!imageOption) {
+                const opt = document.createElement('option');
+                opt.value = 'image';
+                opt.textContent = 'Image';
+                typeSelect.appendChild(opt);
+            }
+        } else {
+            if (imageOption) {
+                typeSelect.removeChild(imageOption);
+            }
+        }
+    }
 
     function updateQualityOptions() {
         const format = typeSelect.value;
         qualitySelect.innerHTML = '';
+
+        if (format === 'image') {
+            qualityGroup.style.display = 'none';
+            return;
+        }
+
+        qualityGroup.style.display = 'flex';
         qualityOptions[format].forEach(option => {
             const opt = document.createElement('option');
             opt.value = option.value;
             opt.textContent = option.text;
             qualitySelect.appendChild(opt);
         });
+
         if (format === 'mp3') {
             qualitySelect.value = '320';
         } else {
@@ -57,11 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon.classList.add('active');
             }
         });
-        if (platformsWithoutQuality.includes(platform)) {
-            qualityGroup.style.display = 'none';
-        } else {
-            qualityGroup.style.display = 'flex';
-        }
+        updateContentTypeOptions();
+        updateQualityOptions();
     }
 
     platformIcons.forEach(icon => {
@@ -79,13 +101,17 @@ document.addEventListener('DOMContentLoaded', () => {
     typeSelect.addEventListener('change', updateQualityOptions);
 
     convertBtn.addEventListener('click', () => {
-        const urlInput = document.getElementById('url-input');
         const url = urlInput.value;
         const type = typeSelect.value;
         const quality = qualitySelect.value;
 
         if (!url) {
             alert('Please paste a link first!');
+            return;
+        }
+
+        if (url.match(/\.(jpeg|jpg|gif|png)$/) != null && type !== 'image') {
+            alert('You have pasted an image link. Please select the "Image" content type.');
             return;
         }
 
@@ -132,22 +158,21 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(error => {
             alert(`Error: ${error.message}`);
+            urlInput.value = '';
             downloaderSection.style.display = 'block';
             convertingSection.style.display = 'none';
         });
     });
 
     convertNextBtn.addEventListener('click', () => {
-        const urlInput = document.getElementById('url-input');
         urlInput.value = '';
-
         downloaderSection.style.display = 'block';
         downloadStartedSection.style.display = 'none';
-
         convertBtn.disabled = false;
         convertBtn.textContent = 'Convert';
     });
 
+    updateContentTypeOptions();
     updateQualityOptions();
     handlePlatformSelection(selectedPlatform);
 });

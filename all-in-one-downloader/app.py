@@ -31,17 +31,18 @@ def download():
     if not url:
         return jsonify({'error': 'URL is required'}), 400
 
-    # Generate a unique directory for this request to avoid filename conflicts
     request_dir = os.path.join(TEMP_DIR, str(uuid.uuid4()))
     os.makedirs(request_dir)
 
     try:
-        # --- 1. Download the file using yt-dlp ---
         ydl_opts = {
             'outtmpl': os.path.join(request_dir, '%(title)s.%(ext)s'),
+            'nocheckcertificate': True,  # Fix for Vimeo SSL issues
         }
 
-        if content_type == 'mp3':
+        if content_type == 'image':
+            ydl_opts['format'] = 'best'
+        elif content_type == 'mp3':
             ydl_opts['format'] = 'bestaudio/best'
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -55,9 +56,7 @@ def download():
             info = ydl.extract_info(url, download=True)
             original_filepath = ydl.prepare_filename(info)
 
-        # Determine the final converted filepath
         if content_type == 'mp3':
-            # yt-dlp changes the extension to .mp3 after conversion
             final_filepath = os.path.splitext(original_filepath)[0] + '.mp3'
         else:
             final_filepath = original_filepath
@@ -65,27 +64,38 @@ def download():
         if not os.path.exists(final_filepath):
              raise Exception("Converted file not found. Check FFmpeg installation.")
 
-        # --- 2. Prepare the final filename for the user ---
         title = info.get('title', 'download')
         ext = 'mp3' if content_type == 'mp3' else info.get('ext', 'mp4')
-        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c in (' ', '-')]).rstrip()
-        final_filename = f"JusDown - {safe_title} - {content_type.upper()} | {quality}.{ext}"
+        if content_type == 'image':
+            ext = 'jpg'
 
-        # --- 3. Send the file and clean up ---
+        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c in (' ', '-')]).rstrip()
+        base_filename = f"JusDown - {safe_title} - {content_type.upper()}"
+
+        if quality:
+            base_filename += f" | {quality}"
+
+        max_len = 230 - len(ext) - 1
+        final_filename = f"{base_filename[:max_len]}.{ext}"
+
+        mimetype = 'audio/mpeg'
+        if content_type == 'mp4':
+            mimetype = 'video/mp4'
+        elif content_type == 'image':
+            mimetype = 'image/jpeg'
+
         return send_file(
             final_filepath,
             as_attachment=True,
             download_name=final_filename,
-            mimetype='audio/mpeg' if content_type == 'mp3' else 'video/mp4'
+            mimetype=mimetype
         )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
-        # Clean up the temporary directory for this request
         if os.path.exists(request_dir):
             shutil.rmtree(request_dir)
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

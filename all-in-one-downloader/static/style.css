@@ -240,7 +240,7 @@ select {
 .sites-grid span {
     background-color: #f1f3f5;
     padding: 0.8rem;
-,    border-radius: 8px;
+    border-radius: 8px;
     font-weight: 600;
 }
 
@@ -325,4 +325,25 @@ footer {
     justify-content: center;
     gap: 1rem;
     margin-top: 1.5rem;
+}
+
+#download-started-section {
+    text-align: center;
+}
+
+#convert-next-btn {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: background-color 0.3s ease;
+    margin-top: 1rem;
+}
+
+#convert-next-btn:hover {
+    background-color: #0056b3;
 }
