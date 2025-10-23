@@ -17,6 +17,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 header {
@@ -201,7 +202,6 @@ select {
     width: 100%;
     max-width: 900px;
     margin: 0 auto;
-    padding: 0 1rem;
 }
 
 .info-section, .supported-sites {
@@ -272,11 +272,13 @@ footer {
     }
 
     main {
-        padding: 1rem;
+        padding: 1rem 0;
     }
 
     .downloader, .info-section, .supported-sites {
         padding: 1.5rem;
+        border-radius: 0;
+        box-shadow: none;
     }
 
     .platform-slider {
@@ -301,7 +303,7 @@ footer {
 
 @media (max-width: 480px) {
     .downloader, .info-section, .supported-sites {
-        padding: 1rem;
+        padding: 1rem 1.5rem;
     }
 
     header h1 {
