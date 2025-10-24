@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const platformsWithImage = ['instagram', 'facebook', 'tiktok', 'snapchat', 'x-twitter', 'linkedin', 'pinterest'];
-    const noQualitySelection = ['facebook', 'instagram', 'tiktok', 'snapchat', 'x-twitter', 'linkedin'];
+    const noQualitySelection = ['facebook', 'instagram', 'tiktok', 'snapchat', 'x-twitter', 'linkedin', 'pinterest'];
     let selectedPlatform = 'youtube';
 
     function updateContentTypeOptions() {
