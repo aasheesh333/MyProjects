@@ -69,11 +69,19 @@ def login():
     if username not in users or users[username]['password'] != password:
         return jsonify({'error': 'Invalid credentials'}), 401
     session['user'] = username
-    return jsonify({'status': 'success'})
+    user_data = users[username]
+    if user_data.get('subscribed'):
+        redirect_url = url_for('serve_index')
+    else:
+        redirect_url = url_for('serve_static_files', filename='pricing.html')
+    return jsonify({'status': 'success', 'redirect_url': redirect_url})
 
 @app.route('/logout')
 def logout():
     session.pop('user', None)
+    next_url = request.args.get('next')
+    if next_url:
+        return redirect(next_url)
     return redirect(url_for('serve_index'))
 
 

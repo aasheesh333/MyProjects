@@ -7,5 +7,10 @@
         "password": "password",
         "subscribed": false,
         "subscription_id": null
+    },
+    "testuser_f15a925f-59f7-4b56-ae66-37548bd043e7": {
+        "password": "password",
+        "subscribed": false,
+        "subscription_id": null
     }
 }

@@ -59,12 +59,17 @@
                         .then(verifyResponse => verifyResponse.json())
                         .then(verifyResult => {
                             if (verifyResult.status === 'success') {
-                                window.location.href = '/';
+                            window.location.href = `thank-you.html?plan_id=${planId}`;
                             } else {
-                                alert('Payment verification failed. Please contact support.');
+                            window.location.href = `payment-failed.html?plan_id=${planId}`;
                             }
                         });
                     },
+                "modal": {
+                    "ondismiss": function(){
+                        window.location.href = `payment-failed.html?plan_id=${planId}`;
+                    }
+                },
                     "prefill": {
                         "name": "Test User",
                         "email": "test.user@example.com",
