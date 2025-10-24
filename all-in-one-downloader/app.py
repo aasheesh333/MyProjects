@@ -5,6 +5,16 @@ import gallery_dl
 import shutil
 import uuid
 import zipfile
+import logging
+
+# --- Custom Logger for yt-dlp and gallery-dl ---
+class YdlLogger:
+    def debug(self, msg):
+        pass
+    def warning(self, msg):
+        logging.warning(msg)
+    def error(self, msg):
+        logging.error(msg)
 
 # Create a temporary directory for downloads if it doesn't exist
 TEMP_DIR = os.path.join(os.getcwd(), 'temp_downloads')
@@ -41,21 +51,18 @@ def download():
         'Dailymotion': ['dailymotion.com'], 'Twitter': ['twitter.com', 'x.com'],
         'Vimeo': ['vimeo.com'],
     }
-    VIDEO_ONLY_PLATFORMS = ['YouTube', 'Dailymotion', 'Vimeo']
 
     if platform and platform in PLATFORM_PATTERNS:
         if not any(pat in url for pat in PLATFORM_PATTERNS[platform]):
             return jsonify({'error': 'Please select relevant platform to download content.'}), 400
-
-    if platform in VIDEO_ONLY_PLATFORMS and content_type == 'image':
-        return jsonify({'error': f'Image downloads are not supported for {platform}. Please select a video or audio format.'}), 400
 
     request_dir = os.path.join(TEMP_DIR, str(uuid.uuid4()))
     os.makedirs(request_dir)
 
     try:
         if content_type == 'image':
-            if gallery_dl.main.main(['-q', '-d', request_dir, url]) != 0:
+            command = ['-q', '-d', request_dir, '--no-check-certificate', '--no-mtime', url]
+            if gallery_dl.main.main(command) != 0:
                 raise Exception("gallery-dl failed")
 
             downloaded_files = os.listdir(request_dir)
@@ -82,12 +89,15 @@ def download():
             ydl_opts = {
                 'outtmpl': os.path.join(request_dir, '%(id)s.%(ext)s'),
                 'nocheckcertificate': True,
+                'logger': YdlLogger(),
+                'verbose': True,
             }
             if content_type == 'mp3':
                 ydl_opts['format'] = 'bestaudio/best'
                 ydl_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': quality.replace('kb/s', '')}]
             else:
-                ydl_opts['format'] = f"best[ext=mp4][height<={quality[:-1]}]/best[ext=mp4]/best"
+                # Use a more compatible format selector for social media videos
+                ydl_opts['format'] = 'bestvideo+bestaudio/best'
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -108,11 +118,15 @@ def download():
             mimetype = 'audio/mpeg' if content_type == 'mp3' else 'video/mp4'
             return send_file(final_filepath, as_attachment=True, download_name=final_filename, mimetype=mimetype)
 
-    except yt_dlp.utils.DownloadError:
+    except yt_dlp.utils.DownloadError as e:
+        logging.error(f"yt-dlp download error: {e}")
+        if "login required" in str(e).lower() or "rate-limit" in str(e).lower():
+            return jsonify({'error': 'This platform requires a login and is blocking our server. We are working on a solution, but for now, this content cannot be downloaded.'}), 403
         return jsonify({'error': 'Please check your link. The content may be private or unavailable.'}), 500
     except Exception as e:
+        logging.error(f"An unexpected error occurred: {e}", exc_info=True)
         if "gallery-dl failed" in str(e) or "did not download any files" in str(e):
-            return jsonify({'error': 'Please check your link. The requested image or post could not be found.'}), 500
+            return jsonify({'error': 'This platform requires a login and is blocking our server. We are working on a solution, but for now, this content cannot be downloaded.'}), 403
         return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
     finally:
         if os.path.exists(request_dir):
