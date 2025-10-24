@@ -2,3 +2,5 @@ Flask
 yt-dlp
 gallery-dl
 razorpay
+firebase-admin
+google-cloud-firestore

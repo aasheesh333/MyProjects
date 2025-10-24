@@ -1,349 +1,121 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-
-html {
-    box-sizing: border-box;
-}
-
-*, *:before, *:after {
-    box-sizing: inherit;
-}
-
 body {
-    font-family: 'Poppins', Arial, sans-serif;
+    font-family: Arial, sans-serif;
     margin: 0;
-    background-color: #f8f9fa;
-    color: #343a40;
-    padding-top: 80px; /* Space for the fixed header */
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    overflow-x: hidden;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+body.dark-mode {
+    background-color: #121212;
+    color: #f4f4f4;
 }
 
 header {
-    background-color: #ffffff;
-    color: #343a40;
-    padding: 1rem 2rem;
+    background-color: #333;
+    color: #fff;
+    padding: 1rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 1000;
-    box-sizing: border-box;
 }
 
 header h1 {
     margin: 0;
-    font-size: 1.8rem;
-    font-weight: 600;
 }
 
-.button {
-    background-color: #007bff;
-    color: white;
-    padding: 10px 20px;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-    border: none;
-    cursor: pointer;
-    border-radius: 25px;
-    transition: background-color 0.3s ease;
-}
-
-.button:hover {
-    background-color: #0056b3;
-}
-
-main {
-    flex-grow: 1;
+nav {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    align-items: center;
 }
 
-.downloader {
-    background-color: #fff;
-    padding: 2.5rem;
-    border-radius: 15px;
-    width: 100%;
+nav .button {
+    margin-left: 1rem;
+}
+
+#user-profile {
+    display: flex;
+    align-items: center;
+}
+
+#user-pic {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.content-wrapper {
     max-width: 800px;
-    margin: auto;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+body.dark-mode .content-wrapper {
+    background-color: #1e1e1e;
+}
+
+.downloader-section, .thank-you-section, .payment-failed-section {
+    text-align: center;
 }
 
 .platform-selector-container {
     overflow-x: auto;
-    white-space: nowrap;
-    margin-bottom: 2.5rem;
-    padding-bottom: 10px;
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-
-.platform-selector-container::-webkit-scrollbar {
-    display: none;
+    margin-bottom: 2rem;
 }
 
 .platform-slider {
-    display: inline-flex;
-    gap: 15px;
+    display: flex;
+    gap: 1rem;
 }
 
 .platform-icon {
-    background-color: #f1f3f5;
-    border: 1px solid #dee2e6;
-    border-radius: 10px;
-    padding: 12px 20px;
+    padding: 0.75rem 1.5rem;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    background-color: #f9f9f9;
     cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #495057;
-    transition: all 0.2s ease-in-out;
-}
-
-.platform-icon:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
 .platform-icon.active {
-    background-color: #007bff;
-    color: white;
-    border-color: #007bff;
-    transform: translateY(-2px);
-    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.4);
-}
-
-.platform-icon.premium {
-    background-color: #ffc107;
-    color: #212529;
-    border-color: #ffc107;
-}
-
-h2 {
-    text-align: center;
-    margin-bottom: 1.5rem;
-    font-size: 1.5rem;
-    color: #495057;
+    background-color: #3399cc;
+    color: #fff;
+    border-color: #3399cc;
 }
 
 .input-group {
-    display: flex;
-    margin-bottom: 1rem;
+    margin-bottom: 2rem;
 }
 
 #url-input {
-    flex-grow: 1;
-    padding: 1rem;
-    border: 2px solid #ced4da;
-    border-radius: 10px;
-    font-size: 1rem;
-    transition: border-color 0.2s ease;
-}
-
-#url-input:focus {
-    outline: none;
-    border-color: #007bff;
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 5px;
+    border: 1px solid #ddd;
 }
 
 .downloader-controls {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 1rem;
-}
-
-#convert-btn {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 1rem 1.5rem;
-    cursor: pointer;
-    border-radius: 10px;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: background-color 0.3s ease;
-    height: fit-content;
-}
-
-#convert-btn:hover {
-    background-color: #0056b3;
-}
-
-.option-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.option-group label {
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #495057;
-    font-size: 0.9rem;
-}
-
-select {
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    border: 2px solid #ced4da;
-    background-color: #fff;
-    font-size: 1rem;
-}
-
-.content-wrapper {
-    flex-grow: 1;
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 0 1rem;
-}
-
-.info-section, .supported-sites {
-    background-color: #fff;
-    padding: 2.5rem;
-    border-radius: 15px;
-    margin-top: 2rem;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-}
-
-.info-section h3 {
-    margin-top: 2rem;
-}
-
-.info-section ul {
-    list-style: none;
-    padding: 0;
-}
-
-.info-section ul li {
-    margin-bottom: 1rem;
-    line-height: 1.6;
-}
-
-.info-section ul li strong {
-    color: #007bff;
-}
-
-.sites-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 1rem;
-    text-align: center;
-}
-
-.sites-grid span {
-    background-color: #f1f3f5;
-    padding: 0.8rem;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-footer {
-    background-color: #343a40;
-    color: #fff;
-    text-align: center;
-    padding: 2rem;
-    margin-top: 4rem;
-    box-sizing: border-box;
-}
-
-@media (max-width: 768px) {
-    body {
-        padding-top: 60px;
-    }
-
-    header {
-        padding: 0.5rem 1rem;
-    }
-
-    header h1 {
-        font-size: 1.5rem;
-    }
-
-    .button {
-        padding: 8px 16px;
-        font-size: 14px;
-    }
-
-    main {
-        padding: 0;
-    }
-
-    .downloader, .info-section, .supported-sites {
-        padding: 1.5rem;
-        border-radius: 0;
-        box-shadow: none;
-        margin-top: 0;
-    }
-
-    .platform-slider {
-        gap: 10px;
-    }
-
-    .platform-icon {
-        padding: 10px 15px;
-        font-size: 0.9rem;
-    }
-
-    .downloader-controls {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    #convert-btn {
-        width: 100%;
-        padding: 1rem;
-    }
-
-    .content-wrapper {
-        padding: 0;
-    }
-}
-
-@media (max-width: 480px) {
-    .downloader, .info-section, .supported-sites {
-        padding: 1rem;
-    }
-
-    header h1 {
-        font-size: 1.3rem;
-    }
-}
-
-.download {
-    text-align: center;
-}
-
-.download-actions {
-    display: flex;
     justify-content: center;
     gap: 1rem;
-    margin-top: 1.5rem;
+    align-items: center;
 }
 
-#download-started-section {
-    text-align: center;
-}
-
-#convert-next-btn {
-    background-color: #007bff;
-    color: white;
+.button {
+    padding: 0.75rem 1.5rem;
+    border-radius: 5px;
     border: none;
-    padding: 1rem 1.5rem;
+    background-color: #3399cc;
+    color: #fff;
     cursor: pointer;
-    border-radius: 10px;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: background-color 0.3s ease;
-    margin-top: 1rem;
+    transition: background-color 0.3s;
 }
 
-#convert-next-btn:hover {
-    background-color: #0056b3;
+.button:hover {
+    background-color: #287a9f;
 }

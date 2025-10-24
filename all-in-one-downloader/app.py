@@ -9,6 +9,13 @@ import logging
 import razorpay
 import json
 from functools import wraps
+import firebase_admin
+from firebase_admin import credentials, auth, firestore
+
+# --- Firebase Admin SDK setup ---
+# The GOOGLE_APPLICATION_CREDENTIALS environment variable must be set.
+firebase_admin.initialize_app()
+db = firestore.client()
 
 # --- Custom Logger for yt-dlp and gallery-dl ---
 class YdlLogger:
@@ -27,90 +34,86 @@ if not os.path.exists(TEMP_DIR):
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = 'your_secret_key'  # Replace with a real secret key
 
-# --- User Management ---
-USERS_FILE = 'all-in-one-downloader/users.json'
 
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
-    with open(USERS_FILE, 'r') as f:
-        return json.load(f)
 
-def save_users(users):
-    with open(USERS_FILE, 'w') as f:
-        json.dump(users, f, indent=4)
+# --- Firebase User Management ---
+@app.route('/google-login', methods=['POST'])
+def google_login():
+    data = request.get_json()
+    token = data.get('idToken')
+    try:
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token['uid']
+
+        # Check if user exists in Firestore
+        user_ref = db.collection('users').document(uid)
+        user = user_ref.get()
+
+        if not user.exists:
+            # New user, create a profile
+            user_data = {
+                'email': decoded_token.get('email'),
+                'name': decoded_token.get('name'),
+                'picture': decoded_token.get('picture'),
+                'subscribed': False,
+                'subscription_id': None
+            }
+            user_ref.set(user_data)
+
+        session['user'] = uid
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+
+# --- Razorpay Client ---
+razorpay_client = razorpay.Client(auth=("YOUR_KEY_ID", "YOUR_KEY_SECRET"))
+
+from firebase_admin import auth
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user' not in session:
-            return redirect(url_for('login'))
+        uid = session.get("user")
+        if not uid:
+            return jsonify({"status": "error", "message": "User not logged in"}), 401
+        try:
+            auth.get_user(uid)
+        except auth.AuthError:
+            return jsonify({"status": "error", "message": "Invalid user"}), 401
         return f(*args, **kwargs)
     return decorated_function
-
-@app.route('/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    users = load_users()
-    if username in users:
-        return jsonify({'error': 'Username already exists'}), 400
-    users[username] = {'password': password, 'subscribed': False, 'subscription_id': None}
-    save_users(users)
-    return jsonify({'status': 'success'})
-
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    users = load_users()
-    if username not in users or users[username]['password'] != password:
-        return jsonify({'error': 'Invalid credentials'}), 401
-    session['user'] = username
-    user_data = users[username]
-    if user_data.get('subscribed'):
-        redirect_url = url_for('serve_index')
-    else:
-        redirect_url = url_for('serve_static_files', filename='pricing.html')
-    return jsonify({'status': 'success', 'redirect_url': redirect_url})
-
-@app.route('/logout')
-def logout():
-    session.pop('user', None)
-    next_url = request.args.get('next')
-    if next_url:
-        return redirect(next_url)
-    return redirect(url_for('serve_index'))
-
-
-# --- Razorpay Client ---
-razorpay_client = razorpay.Client(auth=("YOUR_KEY_ID", "YOUR_KEY_SECRET"))
 
 @app.route('/create-subscription', methods=['POST'])
 @login_required
 def create_subscription():
     data = request.get_json()
     plan_id = data.get('plan_id') # e.g., 'plan_monthly' or 'plan_yearly'
+    uid = session.get('user')
 
     subscription_data = {
         'plan_id': plan_id,
         'total_count': 12, # e.g., 12 monthly payments
+        'notes': {
+            'firebase_uid': uid
+        }
     }
     subscription = razorpay_client.subscription.create(data=subscription_data)
     return jsonify(subscription)
 
 @app.route('/verify-subscription', methods=['POST'])
-@login_required
 def verify_subscription():
     data = request.get_json()
     try:
         razorpay_client.utility.verify_payment_signature(data)
-        users = load_users()
-        users[session['user']]['subscribed'] = True
-        users[session['user']]['subscription_id'] = data['razorpay_subscription_id']
-        save_users(users)
+        uid = session.get('user')
+        if not uid:
+            return jsonify({"status": "error", "message": "User not logged in"}), 401
+
+        user_ref = db.collection('users').document(uid)
+        user_ref.update({
+            'subscribed': True,
+            'subscription_id': data['razorpay_subscription_id']
+        })
         return jsonify({'status': 'success'})
     except razorpay.errors.SignatureVerificationError as e:
         return jsonify({'status': 'failure'})
@@ -130,21 +133,13 @@ def razorpay_webhook():
 
     event = data['event']
     if event == 'subscription.charged':
-        subscription_id = data['payload']['subscription']['entity']['id']
-        users = load_users()
-        for username, user_data in users.items():
-            if user_data.get('subscription_id') == subscription_id:
-                user_data['subscribed'] = True
-                break
-        save_users(users)
+        uid = data['payload']['subscription']['entity']['notes']['firebase_uid']
+        user_ref = db.collection('users').document(uid)
+        user_ref.update({'subscribed': True})
     elif event == 'subscription.halted':
-        subscription_id = data['payload']['subscription']['entity']['id']
-        users = load_users()
-        for username, user_data in users.items():
-            if user_data.get('subscription_id') == subscription_id:
-                user_data['subscribed'] = False
-                break
-        save_users(users)
+        uid = data['payload']['subscription']['entity']['notes']['firebase_uid']
+        user_ref = db.collection('users').document(uid)
+        user_ref.update({'subscribed': False})
 
     return 'OK', 200
 
@@ -163,17 +158,22 @@ PREMIUM_PLATFORMS = ['Vimeo']
 @app.route('/status')
 def status():
     if 'user' in session:
-        users = load_users()
-        user_data = users.get(session['user'])
-        return jsonify({
-            'logged_in': True,
-            'username': session['user'],
-            'subscribed': user_data.get('subscribed', False)
-        })
+        uid = session.get('user')
+        user_ref = db.collection('users').document(uid)
+        user = user_ref.get()
+        if user.exists:
+            user_data = user.to_dict()
+            return jsonify({
+                'logged_in': True,
+                'user': {
+                    'name': user_data.get('name'),
+                    'picture': user_data.get('picture'),
+                },
+                'subscribed': user_data.get('subscribed', False)
+            })
     return jsonify({'logged_in': False})
 
 @app.route('/download', methods=['POST'])
-@login_required
 def download():
     data = request.get_json()
     url = data.get('url')
@@ -185,10 +185,14 @@ def download():
         return jsonify({'error': 'URL is required'}), 400
 
     if platform in PREMIUM_PLATFORMS:
-        if 'user' not in session:
+        uid = session.get('user')
+        if not uid:
             return jsonify({'error': 'Login required for premium platforms'}), 401
-        users = load_users()
-        if not users[session['user']]['subscribed']:
+
+        user_ref = db.collection('users').document(uid)
+        user = user_ref.get()
+
+        if not user.exists or not user.to_dict().get('subscribed'):
             return jsonify({'error': 'Subscription required for premium platforms'}), 403
 
     # --- Server-Side Validation ---
