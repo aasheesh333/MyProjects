@@ -33,7 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
         image: [],
     };
 
-    const platformsWithImage = ['instagram', 'facebook', 'pinterest'];
+    const platformsWithImage = ['instagram', 'facebook', 'tiktok', 'snapchat', 'x-twitter', 'linkedin', 'pinterest'];
+    const noQualitySelection = ['facebook', 'instagram', 'tiktok', 'snapchat', 'x-twitter', 'linkedin'];
     let selectedPlatform = 'youtube';
 
     function updateContentTypeOptions() {
@@ -56,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const format = typeSelect.value;
         qualitySelect.innerHTML = '';
 
-        if (format === 'image') {
+        if (format === 'image' || noQualitySelection.includes(selectedPlatform)) {
             qualityGroup.style.display = 'none';
             return;
         }

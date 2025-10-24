@@ -38,10 +38,10 @@ def download():
     PLATFORM_PATTERNS = {
         'YouTube': ['youtube.com', 'youtu.be'], 'Instagram': ['instagram.com'],
         'Facebook': ['facebook.com', 'fb.watch'], 'TikTok': ['tiktok.com'],
-        'Vimeo': ['vimeo.com'], 'Dailymotion': ['dailymotion.com'],
-        'Twitter': ['twitter.com', 'x.com'],
+        'Dailymotion': ['dailymotion.com'], 'Twitter': ['twitter.com', 'x.com'],
+        'Vimeo': ['vimeo.com'],
     }
-    VIDEO_ONLY_PLATFORMS = ['YouTube', 'Vimeo', 'Dailymotion']
+    VIDEO_ONLY_PLATFORMS = ['YouTube', 'Dailymotion', 'Vimeo']
 
     if platform and platform in PLATFORM_PATTERNS:
         if not any(pat in url for pat in PLATFORM_PATTERNS[platform]):
