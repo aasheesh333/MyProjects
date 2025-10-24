@@ -10,7 +10,9 @@
     <header>
         <h1>JusDown</h1>
         <nav>
-            <a href="signup.html" class="button">Sign Up</a>
+            <a href="login.html" class="button" id="login-btn">Login</a>
+            <a href="logout" class="button" id="logout-btn" style="display: none;">Logout</a>
+            <a href="pricing.html" class="button" id="premium-btn" style="display: none;">Go Premium</a>
         </nav>
     </header>
     <main class="content-wrapper">
@@ -107,5 +109,23 @@
         <p>&copy; 2024 JusDown. All rights reserved.</p>
     </footer>
     <script src="static/script.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    const loginBtn = document.getElementById('login-btn');
+                    const logoutBtn = document.getElementById('logout-btn');
+                    const premiumBtn = document.getElementById('premium-btn');
+                    if (data.logged_in) {
+                        loginBtn.style.display = 'none';
+                        logoutBtn.style.display = 'block';
+                        if (!data.subscribed) {
+                            premiumBtn.style.display = 'block';
+                        }
+                    }
+                });
+        });
+    </script>
 </body>
 </html>

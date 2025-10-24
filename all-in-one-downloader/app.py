@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, request, jsonify, send_file
+from flask import Flask, send_from_directory, request, jsonify, send_file, session, redirect, url_for
 import os
 import yt_dlp
 import gallery_dl
@@ -6,6 +6,9 @@ import shutil
 import uuid
 import zipfile
 import logging
+import razorpay
+import json
+from functools import wraps
 
 # --- Custom Logger for yt-dlp and gallery-dl ---
 class YdlLogger:
@@ -22,6 +25,120 @@ if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
+app.secret_key = 'your_secret_key'  # Replace with a real secret key
+
+# --- User Management ---
+USERS_FILE = 'all-in-one-downloader/users.json'
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, 'r') as f:
+        return json.load(f)
+
+def save_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=4)
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    users = load_users()
+    if username in users:
+        return jsonify({'error': 'Username already exists'}), 400
+    users[username] = {'password': password, 'subscribed': False, 'subscription_id': None}
+    save_users(users)
+    return jsonify({'status': 'success'})
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    users = load_users()
+    if username not in users or users[username]['password'] != password:
+        return jsonify({'error': 'Invalid credentials'}), 401
+    session['user'] = username
+    return jsonify({'status': 'success'})
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('serve_index'))
+
+
+# --- Razorpay Client ---
+razorpay_client = razorpay.Client(auth=("YOUR_KEY_ID", "YOUR_KEY_SECRET"))
+
+@app.route('/create-subscription', methods=['POST'])
+@login_required
+def create_subscription():
+    data = request.get_json()
+    plan_id = data.get('plan_id') # e.g., 'plan_monthly' or 'plan_yearly'
+
+    subscription_data = {
+        'plan_id': plan_id,
+        'total_count': 12, # e.g., 12 monthly payments
+    }
+    subscription = razorpay_client.subscription.create(data=subscription_data)
+    return jsonify(subscription)
+
+@app.route('/verify-subscription', methods=['POST'])
+@login_required
+def verify_subscription():
+    data = request.get_json()
+    try:
+        razorpay_client.utility.verify_payment_signature(data)
+        users = load_users()
+        users[session['user']]['subscribed'] = True
+        users[session['user']]['subscription_id'] = data['razorpay_subscription_id']
+        save_users(users)
+        return jsonify({'status': 'success'})
+    except razorpay.errors.SignatureVerificationError as e:
+        return jsonify({'status': 'failure'})
+
+@app.route('/razorpay-webhook', methods=['POST'])
+def razorpay_webhook():
+    data = request.get_json()
+    webhook_secret = 'YOUR_WEBHOOK_SECRET'
+    try:
+        razorpay_client.utility.verify_webhook_signature(
+            request.data.decode('utf-8'),
+            request.headers.get('X-Razorpay-Signature'),
+            webhook_secret
+        )
+    except razorpay.errors.SignatureVerificationError as e:
+        return 'Invalid signature', 400
+
+    event = data['event']
+    if event == 'subscription.charged':
+        subscription_id = data['payload']['subscription']['entity']['id']
+        users = load_users()
+        for username, user_data in users.items():
+            if user_data.get('subscription_id') == subscription_id:
+                user_data['subscribed'] = True
+                break
+        save_users(users)
+    elif event == 'subscription.halted':
+        subscription_id = data['payload']['subscription']['entity']['id']
+        users = load_users()
+        for username, user_data in users.items():
+            if user_data.get('subscription_id') == subscription_id:
+                user_data['subscribed'] = False
+                break
+        save_users(users)
+
+    return 'OK', 200
 
 @app.route('/')
 def serve_index():
@@ -33,7 +150,22 @@ def serve_static_files(filename):
         return send_from_directory('.', filename)
     return app.send_static_file(filename)
 
+PREMIUM_PLATFORMS = ['Vimeo']
+
+@app.route('/status')
+def status():
+    if 'user' in session:
+        users = load_users()
+        user_data = users.get(session['user'])
+        return jsonify({
+            'logged_in': True,
+            'username': session['user'],
+            'subscribed': user_data.get('subscribed', False)
+        })
+    return jsonify({'logged_in': False})
+
 @app.route('/download', methods=['POST'])
+@login_required
 def download():
     data = request.get_json()
     url = data.get('url')
@@ -43,6 +175,13 @@ def download():
 
     if not url:
         return jsonify({'error': 'URL is required'}), 400
+
+    if platform in PREMIUM_PLATFORMS:
+        if 'user' not in session:
+            return jsonify({'error': 'Login required for premium platforms'}), 401
+        users = load_users()
+        if not users[session['user']]['subscribed']:
+            return jsonify({'error': 'Subscription required for premium platforms'}), 403
 
     # --- Server-Side Validation ---
     PLATFORM_PATTERNS = {

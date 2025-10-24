@@ -1,0 +1,11 @@
+{
+    "testuser": {
+        "password": "password",
+        "subscribed": false
+    },
+    "testuser_e9f2db79-40f3-4574-a34b-c3416dca34c5": {
+        "password": "password",
+        "subscribed": false,
+        "subscription_id": null
+    }
+}

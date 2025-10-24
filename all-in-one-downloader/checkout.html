@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusDown - Checkout</title>
+    <link rel="stylesheet" href="static/style.css">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+    <header>
+        <h1>JusDown</h1>
+    </header>
+    <main class="content-wrapper">
+        <section class="checkout-section">
+            <h2>Subscribe to Premium</h2>
+            <p>You're just one step away from unlocking premium features.</p>
+            <button id="rzp-button1">Pay with Razorpay</button>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 JusDown. All rights reserved.</p>
+    </footer>
+    <script>
+        document.getElementById('rzp-button1').onclick = function(e){
+            const urlParams = new URLSearchParams(window.location.search);
+            const planId = urlParams.get('plan_id');
+
+            // Fetch subscription details from the server
+            fetch('/create-subscription', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    plan_id: planId,
+                }),
+            })
+            .then(response => response.json())
+            .then(subscription => {
+                var options = {
+                    "key": "YOUR_KEY_ID", // Will be replaced with user's key
+                    "subscription_id": subscription.id,
+                    "name": "JusDown",
+                    "description": "Premium Subscription",
+                    "handler": function (response){
+                        // Verify payment on the backend
+                        fetch('/verify-subscription', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_subscription_id: response.razorpay_subscription_id,
+                                razorpay_signature: response.razorpay_signature,
+                            }),
+                        })
+                        .then(verifyResponse => verifyResponse.json())
+                        .then(verifyResult => {
+                            if (verifyResult.status === 'success') {
+                                window.location.href = '/';
+                            } else {
+                                alert('Payment verification failed. Please contact support.');
+                            }
+                        });
+                    },
+                    "prefill": {
+                        "name": "Test User",
+                        "email": "test.user@example.com",
+                        "contact": "9999999999"
+                    },
+                    "theme": {
+                        "color": "#3399cc"
+                    }
+                };
+                var rzp1 = new Razorpay(options);
+                rzp1.open();
+            });
+            e.preventDefault();
+        }
+    </script>
+</body>
+</html>
