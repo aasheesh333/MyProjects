@@ -62,7 +62,7 @@ def download():
     try:
         if content_type == 'image':
             command = ['-q', '-d', request_dir, '--no-check-certificate', '--no-mtime', url]
-            if gallery_dl.main.main(command) != 0:
+            if gallery_dl.main(command) != 0:
                 raise Exception("gallery-dl failed")
 
             downloaded_files = os.listdir(request_dir)
