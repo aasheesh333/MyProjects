@@ -18,8 +18,10 @@ from firebase_admin import credentials, auth, firestore
 load_dotenv()
 
 # --- Firebase Admin SDK setup ---
-# The GOOGLE_APPLICATION_CREDENTIALS environment variable must be set.
-firebase_admin.initialize_app()
+# The path to your Firebase service account JSON file is read from the .env file.
+cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
+cred = credentials.Certificate(cred_path)
+firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # --- Custom Logger for yt-dlp and gallery-dl ---
