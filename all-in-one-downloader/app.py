@@ -1,5 +1,6 @@
 from flask import Flask, send_from_directory, request, jsonify, send_file, session, redirect, url_for
 import os
+from dotenv import load_dotenv
 import yt_dlp
 import gallery_dl
 import shutil
@@ -11,6 +12,10 @@ import json
 from functools import wraps
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
+
+# --- Load Environment Variables ---
+# Make sure to create a .env file with your credentials
+load_dotenv()
 
 # --- Firebase Admin SDK setup ---
 # The GOOGLE_APPLICATION_CREDENTIALS environment variable must be set.
@@ -32,7 +37,7 @@ if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-app.secret_key = 'your_secret_key'  # Replace with a real secret key
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
 
 
@@ -66,7 +71,7 @@ def google_login():
         return jsonify({"status": "error", "message": str(e)}), 401
 
 # --- Razorpay Client ---
-razorpay_client = razorpay.Client(auth=("YOUR_KEY_ID", "YOUR_KEY_SECRET"))
+razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET")))
 
 from firebase_admin import auth
 
@@ -121,7 +126,7 @@ def verify_subscription():
 @app.route('/razorpay-webhook', methods=['POST'])
 def razorpay_webhook():
     data = request.get_json()
-    webhook_secret = 'YOUR_WEBHOOK_SECRET'
+    webhook_secret = os.getenv('RAZORPAY_WEBHOOK_SECRET')
     try:
         razorpay_client.utility.verify_webhook_signature(
             request.data.decode('utf-8'),

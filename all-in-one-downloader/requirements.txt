@@ -4,3 +4,4 @@ gallery-dl
 razorpay
 firebase-admin
 google-cloud-firestore
+python-dotenv
