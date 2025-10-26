@@ -6,4 +6,3 @@ firebase-admin
 google-cloud-firestore
 python-dotenv
 gunicorn
-whitenoise

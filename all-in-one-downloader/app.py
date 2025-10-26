@@ -12,44 +12,30 @@ import json
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from functools import wraps
-from whitenoise import WhiteNoise
 
 # --- Load Environment Variables ---
 load_dotenv()
 
 # --- Initialize Firebase Admin SDK ---
-cred_json_str = os.getenv('FIREBASE_CREDENTIALS_JSON')
 cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
 db = None
 
 try:
-    if cred_json_str:
-        cred_info = json.loads(cred_json_str)
-        cred = credentials.Certificate(cred_info)
-    elif cred_path and os.path.exists(cred_path):
-        cred = credentials.Certificate(cred_path)
-    else:
-        raise ValueError("Firebase credentials not found.")
+    if not cred_path or not os.path.exists(cred_path):
+        raise ValueError("FIREBASE_CREDENTIALS_PATH is not set or the file does not exist.")
 
+    cred = credentials.Certificate(cred_path)
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)
     db = firestore.client()
 except Exception as e:
-    logging.warning(f"Firebase initialization failed: {e}")
+    logging.warning(f"Firebase initialization failed: {e}. Firestore functionality will be disabled.")
 
 # --- Initialize Flask App ---
-# static_folder=None disables Flask's default static handling.
-# We will let WhiteNoise handle all static files.
-app = Flask(__name__, static_folder=None)
+# Use the 'static' directory for CSS/JS files.
+# Use the root '.' for serving HTML files.
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
-
-# --- Configure WhiteNoise ---
-# Wrap the Flask app with WhiteNoise. WhiteNoise will serve files from the 'static'
-# directory and any other files found in the root of the project.
-app.wsgi_app = WhiteNoise(app.wsgi_app, root='.')
-# Add the static directory explicitly for files like style.css
-app.wsgi_app.add_files('static/')
-
 
 # --- Razorpay Client ---
 razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET")))
@@ -219,5 +205,16 @@ def download():
     finally:
         if os.path.exists(request_dir): shutil.rmtree(request_dir)
 
+# --- Static File Serving for Root and HTML files ---
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:filename>')
+def serve_root_files(filename):
+    # This route serves other HTML files like pricing.html, etc.
+    return send_from_directory('.', filename)
+
+# The 'app' object is the entry point for Gunicorn
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

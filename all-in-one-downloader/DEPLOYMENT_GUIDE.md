@@ -36,18 +36,25 @@ From the `all-in-one-downloader` directory, run the server with `gunicorn`:
 gunicorn "app:app"
 ```
 
-This single command will start your server. It serves your website and your API. You can now open `http://localhost:8000` in your browser.
+This single command will start your server, serving both your website and your API. You can now open `http://localhost:8000` in your browser.
 
 ---
 
 ## Part 2: Deploying to Render.com
 
-**1. Create a New Web Service**
+**1. Get Your Firebase Key**
+
+*   Go to the [Firebase Console](https://console.firebase.google.com/).
+*   Select your project, click the gear icon, and go to **Project settings**.
+*   Go to the **Service accounts** tab and click **Generate new private key**.
+*   A JSON file will be downloaded. **You will need the content of this file.**
+
+**2. Create a New Web Service on Render**
 
 *   On the Render Dashboard, click **New +** -> **Web Service**.
 *   Connect your GitHub and select your project repository.
 
-**2. Configure the Service**
+**3. Configure the Service**
 
 Use these settings on the configuration page:
 
@@ -57,16 +64,16 @@ Use these settings on the configuration page:
 *   **Build Command**: `pip install -r requirements.txt`
 *   **Start Command**: `gunicorn "app:app"`
 
-**3. Add Environment Variables & Secrets**
+**4. Add Environment Variables & Secrets**
 
 Scroll down to the **Environment** section.
 
-*   Click **Add Environment Variable** to add your Razorpay keys and other settings.
-*   Click **Add Secret File** to add your Firebase credentials.
+*   Click **Add Environment Variable** for your Razorpay keys.
+*   Click **Add Secret File** for your Firebase key.
 
 Here is the full list of what you need to add:
 
-| Type                | Key                           | Example Value                                       |
+| Type                | Key                           | Example Value / Instructions                        |
 | ------------------- | ----------------------------- | --------------------------------------------------- |
 | Environment Variable| `PYTHON_VERSION`              | `3.11.4`                                            |
 | Environment Variable| `FLASK_SECRET_KEY`            | `2c0543ed04fd55de7ec72cfe93ea2f8926f0398a07b56790`    |
@@ -77,6 +84,7 @@ Here is the full list of what you need to add:
 |                     |                               | *Paste the **content** of your JSON file here*      |
 
 
-**4. Create the Web Service**
+**5. Create the Web Service**
 
 *   Click **Create Web Service**. Render will now deploy your application.
+*   Once it's live, you can access it at the URL provided on your dashboard.
