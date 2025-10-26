@@ -1,90 +1,57 @@
-# Deployment Guide for JusDown
+# Final Deployment Guide for JusDown
 
-This guide contains everything you need to run your application for local testing and to deploy it to Render.com.
+This guide contains the corrected and simplified instructions to get your application fully working on Render.com.
 
-## Part 1: Local Testing on Your Ubuntu Machine
+## Part 1: Authorize Your Domain in Firebase
 
-Follow these steps to run the application on your own computer.
+This is a **critical new step** to fix the Google Sign-in issue. You must tell Firebase to trust your new website URL.
 
-**1. Install Dependencies**
+1.  **Go to the Firebase Console**: [https://console.firebase.google.com/](https://console.firebase.google.com/)
+2.  Select your project.
+3.  In the left menu, go to **Authentication**.
+4.  Click on the **Settings** tab.
+5.  Select the **Authorized domains** section.
+6.  Click **Add domain** and enter the domain name that Render gave you (e.g., `jusdown.onrender.com`).
+7.  Click **Add**.
 
-Open your terminal and run this command to install `python`, `pip`, and `ffmpeg`:
-
-```bash
-sudo apt-get update && sudo apt-get install -y python3 python3-pip ffmpeg
-```
-
-**2. Install Python Packages**
-
-Navigate to the `all-in-one-downloader` directory and install the required libraries:
-
-```bash
-cd path/to/your/all-in-one-downloader
-pip3 install -r requirements.txt
-```
-
-**3. Configure Credentials**
-
-*   Rename the `env.txt` file to `.env`.
-*   Open the `.env` file and fill in your secrets for Razorpay and the full path to your Firebase key file.
-
-**4. Run the Server**
-
-From the `all-in-one-downloader` directory, run the server with `gunicorn`:
-
-```bash
-gunicorn "app:app"
-```
-
-This single command will start your server, serving both your website and your API. You can now open `http://localhost:8000` in your browser.
-
----
-
-## Part 2: Deploying to Render.com
+## Part 2: Deploying on Render.com
 
 **1. Get Your Firebase Key**
 
-*   Go to the [Firebase Console](https://console.firebase.google.com/).
-*   Select your project, click the gear icon, and go to **Project settings**.
-*   Go to the **Service accounts** tab and click **Generate new private key**.
-*   A JSON file will be downloaded. **You will need the content of this file.**
+*   If you don't have it already, go to your **Project settings** in Firebase, then the **Service accounts** tab, and click **Generate new private key**. A JSON file will be downloaded.
 
-**2. Create a New Web Service on Render**
+**2. Create the Web Service on Render**
 
 *   On the Render Dashboard, click **New +** -> **Web Service**.
 *   Connect your GitHub and select your project repository.
 
 **3. Configure the Service**
 
-Use these settings on the configuration page:
+Use these **updated and corrected** settings:
 
-*   **Name**: `jusdown-testing` (or any unique name).
+*   **Name**: `jusdown` (or any unique name).
 *   **Root Directory**: `all-in-one-downloader` (Set this explicitly).
 *   **Runtime**: **Python 3**.
-*   **Build Command**: `pip install -r requirements.txt`
+*   **Build Command**: `bash build.sh` (This now runs our new script).
 *   **Start Command**: `gunicorn "app:app"`
 
 **4. Add Environment Variables & Secrets**
 
-Scroll down to the **Environment** section.
+Scroll down to the **Environment** section and add the following:
 
-*   Click **Add Environment Variable** for your Razorpay keys.
-*   Click **Add Secret File** for your Firebase key.
+| Type                | Key                           | Value / Instructions                                 |
+| ------------------- | ----------------------------- | ---------------------------------------------------- |
+| Environment Variable| `PYTHON_VERSION`              | `3.11.4`                                             |
+| Environment Variable| `FLASK_SECRET_KEY`            | `2c0543ed04fd55de7ec72cfe93ea2f8926f0398a07b56790`     |
+| Environment Variable| `RAZORPAY_KEY_ID`             | *Your actual Razorpay Test Key ID*                   |
+| Environment Variable| `RAZORPAY_KEY_SECRET`         | *Your actual Razorpay Test Key Secret*               |
+| Environment Variable| `RAZORPAY_WEBHOOK_SECRET`     | *Your actual Razorpay Webhook Secret*                |
+| Secret File         | `FIREBASE_CREDENTIALS_PATH`   | `firebase_key.json` (This is the **Path** field)     |
+|                     |                               | *Paste the **content** of your JSON file here*       |
 
-Here is the full list of what you need to add:
+**5. Create or Redeploy the Web Service**
 
-| Type                | Key                           | Example Value / Instructions                        |
-| ------------------- | ----------------------------- | --------------------------------------------------- |
-| Environment Variable| `PYTHON_VERSION`              | `3.11.4`                                            |
-| Environment Variable| `FLASK_SECRET_KEY`            | `2c0543ed04fd55de7ec72cfe93ea2f8926f0398a07b56790`    |
-| Environment Variable| `RAZORPAY_KEY_ID`             | *Your actual Razorpay Test Key ID*                  |
-| Environment Variable| `RAZORPAY_KEY_SECRET`         | *Your actual Razorpay Test Key Secret*              |
-| Environment Variable| `RAZORPAY_WEBHOOK_SECRET`     | *Your actual Razorpay Webhook Secret*               |
-| Secret File         | `FIREBASE_CREDENTIALS_PATH`   | `firebase_key.json` (This is the **Path** field)    |
-|                     |                               | *Paste the **content** of your JSON file here*      |
+*   If this is your first time, click **Create Web Service**.
+*   If you are updating your existing service, go to your service's page, click **Manual Deploy**, and choose **Deploy latest commit**.
 
-
-**5. Create the Web Service**
-
-*   Click **Create Web Service**. Render will now deploy your application.
-*   Once it's live, you can access it at the URL provided on your dashboard.
+After the deployment finishes, your application should be fully functional, with all styles, downloads, and sign-in features working correctly.

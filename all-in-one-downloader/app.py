@@ -12,6 +12,7 @@ import json
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from functools import wraps
+from whitenoise import WhiteNoise
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -32,10 +33,15 @@ except Exception as e:
     logging.warning(f"Firebase initialization failed: {e}. Firestore functionality will be disabled.")
 
 # --- Initialize Flask App ---
-# Use the 'static' directory for CSS/JS files.
-# Use the root '.' for serving HTML files.
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+# We disable Flask's default static handling to let WhiteNoise take over.
+app = Flask(__name__, static_folder=None)
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
+
+# --- Configure WhiteNoise ---
+# WhiteNoise will now serve all files from the root directory, including
+# your HTML files and the 'static' directory.
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='.')
+
 
 # --- Razorpay Client ---
 razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET")))
@@ -204,16 +210,6 @@ def download():
         return jsonify({'error': 'An unexpected error occurred.'}), 500
     finally:
         if os.path.exists(request_dir): shutil.rmtree(request_dir)
-
-# --- Static File Serving for Root and HTML files ---
-@app.route('/')
-def serve_index():
-    return send_from_directory('.', 'index.html')
-
-@app.route('/<path:filename>')
-def serve_root_files(filename):
-    # This route serves other HTML files like pricing.html, etc.
-    return send_from_directory('.', filename)
 
 # The 'app' object is the entry point for Gunicorn
 if __name__ == '__main__':
