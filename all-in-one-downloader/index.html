@@ -93,7 +93,7 @@
             auth.signInWithPopup(provider)
                 .then((result) => {
                     result.user.getIdToken().then((idToken) => {
-                        fetch('/google-login', {
+                        fetch('/api/google-login', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -114,15 +114,16 @@
         });
 
         logoutBtn.addEventListener('click', () => {
-            auth.signOut().then((). {
-                fetch('/logout').then(() => {
-                    window.location.reload();
-                });
+            auth.signOut().then(() => {
+                fetch('/api/logout', { method: 'POST' }) // Use POST for logout
+                    .then(() => {
+                        window.location.reload();
+                    });
             });
         });
 
         auth.onAuthStateChanged((user) => {
-            fetch('/status').then(response => response.json()).then(data => {
+            fetch('/api/status').then(response => response.json()).then(data => {
                 if (data.logged_in) {
                     googleSigninBtn.style.display = 'none';
                     userProfile.style.display = 'flex';
