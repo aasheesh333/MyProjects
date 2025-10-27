@@ -33,14 +33,32 @@ except Exception as e:
     logging.warning(f"Firebase initialization failed: {e}. Firestore functionality will be disabled.")
 
 # --- Initialize Flask App ---
+# Get the absolute path of the directory containing app.py to safely locate files
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+STATIC_ROOT = os.path.join(APP_ROOT, 'static')
+
 # We disable Flask's default static handling to let WhiteNoise take over.
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
-# --- Configure WhiteNoise ---
-# WhiteNoise will now serve all files from the root directory, including
-# your HTML files and the 'static' directory.
-app.wsgi_app = WhiteNoise(app.wsgi_app, root='.')
+# --- Configure WhiteNoise for Production ---
+# This is a more robust and secure way to serve static files.
+# It explicitly serves only the 'static' directory and does not expose
+# other files in the application's root.
+app.wsgi_app = WhiteNoise(app.wsgi_app)
+app.wsgi_app.add_files(STATIC_ROOT, prefix='static/')
+
+
+# --- HTML Serving Routes ---
+# We define explicit routes to serve our HTML pages. This prevents the
+# 404 errors and is more secure than a generic file server.
+@app.route('/')
+def serve_index():
+    return send_from_directory(APP_ROOT, 'index.html')
+
+@app.route('/<page_name>.html')
+def serve_page(page_name):
+    return send_from_directory(APP_ROOT, f'{page_name}.html')
 
 
 # --- Razorpay Client ---
