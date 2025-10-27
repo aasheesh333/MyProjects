@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusDown - All in One Downloader</title>
+    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="static/pricing.css">
+</head>
+<body class="dark-mode">
+    <header>
+        <h1>JusDown</h1>
+        <nav>
+            <button id="google-signin-btn" class="button">Sign in with Google</button>
+            <div id="user-profile" style="display: none;">
+                <img id="user-pic" src="" alt="User profile picture">
+                <span id="user-name"></span>
+                <button id="logout-btn" class="button">Logout</button>
+            </div>
+            <button id="dark-mode-toggle" class="button">Toggle Dark Mode</button>
+        </nav>
+    </header>
+    <main class="content-wrapper">
+        <section class="downloader" id="downloader-section">
+            <h2>Select your platform 👇</h2>
+            <div class="platform-selector-container">
+                <div class="platform-slider">
+                    <button class="platform-icon active" data-platform="YouTube">YouTube</button>
+                    <button class="platform-icon" data-platform="Instagram">Instagram</button>
+                    <button class="platform-icon" data-platform="Facebook">Facebook</button>
+                    <button class="platform-icon" data-platform="TikTok">TikTok</button>
+                    <button class="platform-icon" data-platform="Dailymotion">Dailymotion</button>
+                    <button class="platform-icon" data-platform="Twitter">X (Twitter)</button>
+                    <button class="platform-icon premium" data-platform="Vimeo">Vimeo</button>
+                </div>
+            </div>
+            <h2>Paste your link here</h2>
+            <div class="input-group">
+                <input type="url" id="url-input" placeholder="https://example.com/video">
+            </div>
+            <div class="downloader-controls">
+                <div class="option-group">
+                    <label for="type-select">Content Type:</label>
+                    <select id="type-select">
+                        <option value="mp3" selected>MP3</option>
+                        <option value="mp4">MP4</option>
+                    </select>
+                </div>
+                <div class="option-group" id="quality-group">
+                    <label for="quality-select">Quality:</label>
+                    <select id="quality-select">
+                        <option value="320kb/s" selected>320kb/s</option>
+                        <option value="1080p" style="display: none;">1080p</option>
+                    </select>
+                </div>
+                <button id="convert-btn">Convert</button>
+            </div>
+        </section>
+
+        <section id="download-started-section" style="display: none;">
+            <h2>Your download has started!</h2>
+            <button id="convert-next-btn">Convert Next</button>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 JusDown. All rights reserved.</p>
+    </footer>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDZxDqBZnruIvkn8EYDGylO3e5Y4dzf05o",
+            authDomain: "jusdown-ec962.firebaseapp.com",
+            projectId: "jusdown-ec962",
+            storageBucket: "jusdown-ec962.firebasestorage.app",
+            messagingSenderId: "373909979133",
+            appId: "1:373909979133:web:6ac8d5a003b26b7661e394",
+            measurementId: "G-S9MXZDMDX0"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        const googleSigninBtn = document.getElementById('google-signin-btn');
+        const userProfile = document.getElementById('user-profile');
+        const userPic = document.getElementById('user-pic');
+        const userName = document.getElementById('user-name');
+        const logoutBtn = document.getElementById('logout-btn');
+        const darkModeToggle = document.getElementById('dark-mode-toggle');
+
+        googleSigninBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then((result) => {
+                    result.user.getIdToken().then((idToken) => {
+                        fetch('/google-login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ idToken }),
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                window.location.reload();
+                            }
+                        });
+                    });
+                })
+                .catch((error) => {
+                    console.error("Google Sign-In Error:", error);
+                });
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut().then(() => {
+                fetch('/logout', { method: 'POST' }) // Use POST for logout
+                    .then(() => {
+                        window.location.reload();
+                    });
+            });
+        });
+
+        auth.onAuthStateChanged((user) => {
+            fetch('/status').then(response => response.json()).then(data => {
+                if (data.logged_in) {
+                    googleSigninBtn.style.display = 'none';
+                    userProfile.style.display = 'flex';
+                    userPic.src = data.user.picture;
+                    userName.textContent = data.user.name;
+                } else {
+                    googleSigninBtn.style.display = 'block';
+                    userProfile.style.display = 'none';
+                }
+            });
+        });
+
+        darkModeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+        });
+    </script>
+    <script src="static/script.js"></script>
+</body>
+</html>

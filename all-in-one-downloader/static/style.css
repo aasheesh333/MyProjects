@@ -1,0 +1,121 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+body.dark-mode {
+    background-color: #121212;
+    color: #f4f4f4;
+}
+
+header {
+    background-color: #333;
+    color: #fff;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+nav {
+    display: flex;
+    align-items: center;
+}
+
+nav .button {
+    margin-left: 1rem;
+}
+
+#user-profile {
+    display: flex;
+    align-items: center;
+}
+
+#user-pic {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.content-wrapper {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+body.dark-mode .content-wrapper {
+    background-color: #1e1e1e;
+}
+
+.downloader-section, .thank-you-section, .payment-failed-section {
+    text-align: center;
+}
+
+.platform-selector-container {
+    overflow-x: auto;
+    margin-bottom: 2rem;
+}
+
+.platform-slider {
+    display: flex;
+    gap: 1rem;
+}
+
+.platform-icon {
+    padding: 0.75rem 1.5rem;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+.platform-icon.active {
+    background-color: #3399cc;
+    color: #fff;
+    border-color: #3399cc;
+}
+
+.input-group {
+    margin-bottom: 2rem;
+}
+
+#url-input {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+.downloader-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    align-items: center;
+}
+
+.button {
+    padding: 0.75rem 1.5rem;
+    border-radius: 5px;
+    border: none;
+    background-color: #3399cc;
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.button:hover {
+    background-color: #287a9f;
+}

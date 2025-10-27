@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusDown - Thank You</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <header>
+        <h1>JusDown</h1>
+    </header>
+    <main class="content-wrapper">
+        <section class="thank-you-section">
+            <h2>Thank You for Subscribing!</h2>
+            <p>Your premium subscription is now active. You can now enjoy the following benefits:</p>
+            <ul id="plan-benefits">
+                <!-- Benefits will be dynamically inserted here -->
+            </ul>
+            <a href="/" class="button">Start Downloading</a>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 JusDown. All rights reserved.</p>
+    </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const planId = urlParams.get('plan_id');
+            const benefitsList = document.getElementById('plan-benefits');
+
+            const benefits = {
+                plan_pro: [
+                    'Download from 20+ platforms',
+                    'High-quality video and audio',
+                    'Access to some premium platforms',
+                    'Faster download speeds',
+                    'Email support',
+                ],
+                plan_ultimate: [
+                    'Download from 60+ platforms',
+                    'Highest video and audio quality',
+                    'Access to all premium platforms',
+                    'Blazing-fast download speeds',
+                    '24/7 priority support',
+                ],
+            };
+
+            const planBenefits = benefits[planId] || [];
+            planBenefits.forEach(benefit => {
+                const li = document.createElement('li');
+                li.textContent = `✅ ${benefit}`;
+                benefitsList.appendChild(li);
+            });
+        });
+    </script>
+</body>
+</html>

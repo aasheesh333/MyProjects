@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusDown - Payment Failed</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <header>
+        <h1>JusDown</h1>
+    </header>
+    <main class="content-wrapper">
+        <section class="payment-failed-section">
+            <h2>Payment Failed</h2>
+            <p>Unfortunately, we were unable to process your payment. Please try again.</p>
+            <a href="#" id="retry-payment-btn" class="button">Retry Payment</a>
+            <a href="pricing.html" class="button button-secondary">Choose a Different Plan</a>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 JusDown. All rights reserved.</p>
+    </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const planId = urlParams.get('plan_id');
+            const retryBtn = document.getElementById('retry-payment-btn');
+
+            if (planId) {
+                retryBtn.href = `checkout.html?plan_id=${planId}`;
+            } else {
+                // If no plan is specified, send them back to the pricing page
+                retryBtn.href = 'pricing.html';
+            }
+
+            // Automatically log the user out and redirect to the login page
+            fetch('/logout?next=' + encodeURIComponent(window.location.href))
+                .then(() => {
+                    window.location.href = 'login.html';
+                });
+        });
+    </script>
+</body>
+</html>

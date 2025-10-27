@@ -38,7 +38,7 @@ a:visited {
     background-color: azure;
     display: flex;
     align-items: center;
-    column-gap: 20px;    
+    column-gap: 20px;
     justify-content: center;
 }
 
@@ -80,6 +80,6 @@ footer {
 }
 
 footer li a {
-    padding: 2px 20px 2px 20px; 
+    padding: 2px 20px 2px 20px;
     color: white;
 }

@@ -1,0 +1,56 @@
+.pricing-container {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.plan {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 2rem;
+    width: 300px;
+    text-align: center;
+    background-color: #f9f9f9;
+}
+
+.plan.recommended {
+    border-color: #3399cc;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.plan h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.plan .price {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 1.5rem;
+}
+
+.plan .features {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 2rem;
+    text-align: left;
+}
+
+.plan .features li {
+    margin-bottom: 0.5rem;
+}
+
+.plan .button {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    background-color: #3399cc;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.plan .button:hover {
+    background-color: #287a9f;
+}
