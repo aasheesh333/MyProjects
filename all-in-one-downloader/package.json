@@ -1,0 +1,14 @@
+{
+  "name": "all-in-one-downloader",
+  "version": "1.0.0",
+  "description": "A powerful and fast tool to convert and download videos from a huge range of platforms.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.18.2",
+    "uuid": "^13.0.0"
+  }
+}
