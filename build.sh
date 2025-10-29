@@ -4,8 +4,8 @@
 set -e
 
 # Update and install system dependencies
-apt-get update
-apt-get install -y ffmpeg python3-pip
+sudo apt-get update
+sudo apt-get install -y ffmpeg python3-pip
 
 # Install Python packages
 pip3 install yt-dlp gallery-dl
