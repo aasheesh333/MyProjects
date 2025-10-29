@@ -37,7 +37,7 @@ On the configuration page, fill in the fields exactly as described below:
 *   **Runtime:** Select **`Node`** from the dropdown menu. Render will automatically detect that this is a Node.js project.
 *   **Build Command:** This is the command Render runs to prepare your application. Enter the following:
     ```bash
-    sh build.sh
+    npm install
     ```
 *   **Start Command:** This is the command Render runs to start your application after it's built. Enter the following:
     ```bash
