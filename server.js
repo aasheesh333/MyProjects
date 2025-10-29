@@ -49,6 +49,12 @@ app.post('/download', async (req, res) => {
                 const output = await ytdlp(url, {
                     skipDownload: true,
                     printJson: true,
+                    addHeader: [
+                        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                        'Accept-Language: en-US,en;q=0.9',
+                        'Referer: https://www.google.com/',
+                    ],
+                    forceIpv4: true,
                 });
 
                 const data = JSON.parse(output);
@@ -101,6 +107,12 @@ app.post('/download', async (req, res) => {
             const ytdlpArgs = {
                 output: path.join(requestDir, '%(id)s.%(ext)s'),
                 noCheckCertificate: true,
+                addHeader: [
+                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                    'Accept-Language: en-US,en;q=0.9',
+                    'Referer: https://www.google.com/',
+                ],
+                forceIpv4: true,
             };
 
             if (contentType === 'mp3') {
