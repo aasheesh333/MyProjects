@@ -4,7 +4,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const archiver = require('archiver');
 const ytdlp = require('yt-dlp-exec');
-const { instagram, pinterest } = require('btch-downloader');
+const axios = require('axios');
 
 // --- Configure FFmpeg ---
 process.env.FFMPEG_PATH = require('ffmpeg-static');
@@ -45,52 +45,57 @@ app.post('/download', async (req, res) => {
 
     try {
         if (contentType === 'image') {
-            let downloadFunc;
-            if (platform === 'instagram') downloadFunc = instagram;
-            else if (platform === 'pinterest') downloadFunc = pinterest;
-            else {
-                cleanup();
-                return res.status(400).json({ error: 'Image downloads are only supported for Instagram and Pinterest.' });
-            }
+            try {
+                const output = await ytdlp(url, {
+                    skipDownload: true,
+                    printJson: true,
+                });
 
-            const result = await downloadFunc(url);
-            if (!result || !result.media || result.media.length === 0) {
-                 cleanup();
-                return res.status(500).json({ error: 'Could not download images from the provided URL.' });
-            }
+                const data = JSON.parse(output);
 
-            if (result.media.length > 1) {
-                const zipFilename = `JusDown_Images_${uuidv4()}.zip`;
-                const zipFilepath = path.join(TEMP_DIR, zipFilename);
-                const output = fs.createWriteStream(zipFilepath);
-                const archive = archiver('zip');
-
-                archive.pipe(output);
-
-                for (const mediaUrl of result.media) {
-                    archive.append(mediaUrl, { name: path.basename(mediaUrl) });
+                let mediaUrls = [];
+                if (data.entries) {
+                    mediaUrls = data.entries.map(entry => entry.url);
+                } else {
+                    mediaUrls.push(data.url);
                 }
 
-                archive.finalize();
+                if (mediaUrls.length > 1) {
+                    const zipFilename = `JusDown_Images_${uuidv4()}.zip`;
+                    const zipFilepath = path.join(requestDir, zipFilename);
+                    const output = fs.createWriteStream(zipFilepath);
+                    const archive = archiver('zip');
 
-                output.on('close', () => {
-                    res.download(zipFilepath, "JusDown - Image Pack.zip", () => {
-                        cleanup();
-                        fs.unlink(zipFilepath, () => {});
+                    archive.pipe(output);
+
+                    for (let i = 0; i < mediaUrls.length; i++) {
+                        const imageUrl = mediaUrls[i];
+                        const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                        archive.append(response.data, { name: `image_${i + 1}.jpg` });
+                    }
+
+                    archive.finalize();
+
+                    output.on('close', () => {
+                        res.download(zipFilepath, "JusDown - Image Pack.zip", cleanup);
                     });
-                });
-                 archive.on('error', (err) => {
-                    cleanup();
-                    res.status(500).json({ error: 'Failed to create zip file.' });
-                });
 
-
-            } else {
-                 const finalFilepath = result.media[0];
-                 const { name, ext } = path.parse(finalFilepath);
-                 const safeTitle = name.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-                 const finalFilename = `JusDown - ${safeTitle}${ext}`;
-                 res.download(finalFilepath, finalFilename, cleanup);
+                    archive.on('error', (err) => {
+                        cleanup();
+                        return res.status(500).json({ error: 'Unable to download this image at the moment. Please try another link.' });
+                    });
+                } else {
+                    const imageUrl = mediaUrls[0];
+                    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                    const filename = `JusDown_Image_${uuidv4()}.jpg`;
+                    const finalFilepath = path.join(requestDir, filename);
+                    fs.writeFileSync(finalFilepath, response.data);
+                    res.download(finalFilepath, "JusDown - Image.jpg", cleanup);
+                }
+            } catch (error) {
+                console.error('Image download error:', error);
+                cleanup();
+                return res.status(500).json({ error: 'Unable to download this image at the moment. Please try another link.' });
             }
         } else { // Video or Audio
             const ytdlpArgs = {
