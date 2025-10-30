@@ -154,6 +154,9 @@ app.post('/download', async (req, res) => {
                     ytdlpArgs.geoBypassCountry = 'US';
                     ytdlpArgs.forceIpv4 = true;
                     ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
+                    if (process.env.YOUTUBE_COOKIES_PATH) {
+                        ytdlpArgs.cookies = process.env.YOUTUBE_COOKIES_PATH;
+                    }
                 }
 
                 const output = await ytdlp(url, ytdlpArgs);
@@ -225,6 +228,9 @@ app.post('/download', async (req, res) => {
                 ytdlpArgs.geoBypassCountry = 'US';
                 ytdlpArgs.forceIpv4 = true;
                 ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
+                if (process.env.YOUTUBE_COOKIES_PATH) {
+                    ytdlpArgs.cookies = process.env.YOUTUBE_COOKIES_PATH;
+                }
             }
 
             if (contentType === 'mp3') {
