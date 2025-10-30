@@ -142,7 +142,6 @@ app.post('/download', async (req, res) => {
                         'Accept-Language: en-US,en;q=0.9',
                         'Referer: https://www.google.com/',
                     ],
-                    forceIpv4: true,
                 };
 
                 if (url.includes('youtube.com') || url.includes('youtu.be')) {
@@ -153,7 +152,7 @@ app.post('/download', async (req, res) => {
                     ];
                     ytdlpArgs.geoBypass = true;
                     ytdlpArgs.geoBypassCountry = 'US';
-                    ytdlpArgs.extractorArgs = 'youtube:player_client=ios,skip=authcheck';
+                    ytdlpArgs.extractorArgs = 'youtube:player_client=ios';
                 }
 
                 const output = await ytdlp(url, ytdlpArgs);
@@ -213,7 +212,6 @@ app.post('/download', async (req, res) => {
                     'Accept-Language: en-US,en;q=0.9',
                     'Referer: https://www.google.com/',
                 ],
-                forceIpv4: true,
             };
 
             if (url.includes('youtube.com') || url.includes('youtu.be')) {
@@ -224,7 +222,7 @@ app.post('/download', async (req, res) => {
                 ];
                 ytdlpArgs.geoBypass = true;
                 ytdlpArgs.geoBypassCountry = 'US';
-                ytdlpArgs.extractorArgs = 'youtube:player_client=ios,skip=authcheck';
+                ytdlpArgs.extractorArgs = 'youtube:player_client=ios';
             }
 
             if (contentType === 'mp3') {
