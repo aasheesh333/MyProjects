@@ -28,7 +28,6 @@ app.get('/', (req, res) => {
 });
 
 app.post('/download', async (req, res) => {
-    console.log(`[DEBUG] YOUTUBE_COOKIES_PATH: ${process.env.YOUTUBE_COOKIES_PATH}`);
     const { url, type: contentType, quality, platform } = req.body;
 
     if (!url) {
@@ -154,9 +153,12 @@ app.post('/download', async (req, res) => {
                     ytdlpArgs.geoBypass = true;
                     ytdlpArgs.geoBypassCountry = 'US';
                     ytdlpArgs.forceIpv4 = true;
-                    ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
                     if (process.env.YOUTUBE_COOKIES_PATH) {
-                        ytdlpArgs.cookies = process.env.YOUTUBE_COOKIES_PATH;
+                        const tempCookiePath = path.join(requestDir, 'cookies.txt');
+                        fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
+                        ytdlpArgs.cookies = tempCookiePath;
+                    } else {
+                        ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
                     }
                 }
 
@@ -212,6 +214,7 @@ app.post('/download', async (req, res) => {
             const ytdlpArgs = {
                 output: path.join(requestDir, '%(id)s.%(ext)s'),
                 noCheckCertificate: true,
+                ffmpegLocation: require('ffmpeg-static'),
                 addHeader: [
                     'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                     'Accept-Language: en-US,en;q=0.9',
@@ -228,9 +231,12 @@ app.post('/download', async (req, res) => {
                 ytdlpArgs.geoBypass = true;
                 ytdlpArgs.geoBypassCountry = 'US';
                 ytdlpArgs.forceIpv4 = true;
-                ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
                 if (process.env.YOUTUBE_COOKIES_PATH) {
-                    ytdlpArgs.cookies = process.env.YOUTUBE_COOKIES_PATH;
+                    const tempCookiePath = path.join(requestDir, 'cookies.txt');
+                    fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
+                    ytdlpArgs.cookies = tempCookiePath;
+                } else {
+                    ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
                 }
             }
 
