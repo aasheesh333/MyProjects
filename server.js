@@ -19,6 +19,26 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR);
 }
 
+// --- Helper Functions ---
+const addYoutubeOptions = (ytdlpArgs, requestDir) => {
+    ytdlpArgs.addHeader = [
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept-Language: en-US,en;q=0.9',
+        'Referer: https://www.youtube.com/',
+    ];
+    ytdlpArgs.geoBypass = true;
+    ytdlpArgs.geoBypassCountry = 'US';
+    ytdlpArgs.forceIpv4 = true;
+    if (process.env.YOUTUBE_COOKIES_PATH) {
+        const tempCookiePath = path.join(requestDir, 'cookies.txt');
+        fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
+        ytdlpArgs.cookies = tempCookiePath;
+    } else {
+        ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
+    }
+    return ytdlpArgs;
+};
+
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use('/static', express.static(path.join(__dirname, 'static')));
@@ -145,21 +165,7 @@ app.post('/download', async (req, res) => {
                 };
 
                 if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                    ytdlpArgs.addHeader = [
-                        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                        'Accept-Language: en-US,en;q=0.9',
-                        'Referer: https://www.youtube.com/',
-                    ];
-                    ytdlpArgs.geoBypass = true;
-                    ytdlpArgs.geoBypassCountry = 'US';
-                    ytdlpArgs.forceIpv4 = true;
-                    if (process.env.YOUTUBE_COOKIES_PATH) {
-                        const tempCookiePath = path.join(requestDir, 'cookies.txt');
-                        fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
-                        ytdlpArgs.cookies = tempCookiePath;
-                    } else {
-                        ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
-                    }
+                    ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
                 }
 
                 const output = await ytdlp(url, ytdlpArgs);
@@ -223,21 +229,7 @@ app.post('/download', async (req, res) => {
             };
 
             if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                ytdlpArgs.addHeader = [
-                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                    'Accept-Language: en-US,en;q=0.9',
-                    'Referer: https://www.youtube.com/',
-                ];
-                ytdlpArgs.geoBypass = true;
-                ytdlpArgs.geoBypassCountry = 'US';
-                ytdlpArgs.forceIpv4 = true;
-                if (process.env.YOUTUBE_COOKIES_PATH) {
-                    const tempCookiePath = path.join(requestDir, 'cookies.txt');
-                    fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
-                    ytdlpArgs.cookies = tempCookiePath;
-                } else {
-                    ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
-                }
+                ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
             }
 
             if (contentType === 'mp3') {
