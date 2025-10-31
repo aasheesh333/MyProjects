@@ -28,6 +28,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/download', async (req, res) => {
+    console.log(`[DEBUG] YOUTUBE_COOKIES_PATH: ${process.env.YOUTUBE_COOKIES_PATH}`);
     const { url, type: contentType, quality, platform } = req.body;
 
     if (!url) {
