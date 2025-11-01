@@ -14,68 +14,90 @@ document.addEventListener('DOMContentLoaded', () => {
     const convertingSection = document.createElement('section');
     convertingSection.id = 'converting-section';
     convertingSection.style.display = 'none';
-    convertingSection.innerHTML = '<h2>Converting...</h2><p>Your file is being processed. Please wait.</p>';
+    convertingSection.innerHTML = '<h2>Fetching...</h2><p>Getting available formats. Please wait.</p>';
     downloaderSection.parentNode.insertBefore(convertingSection, downloadStartedSection);
 
-    const qualityOptions = {
-        mp3: [
-            { value: '320', text: '320kb/s' },
-            { value: '256', text: '256kb/s' },
-            { value: '128', text: '128kb/s' },
-            { value: '96', text: '96kb/s' },
-        ],
-        mp4: [
-            { value: '1080p', text: '1080p' },
-            { value: '720p', text: '720p' },
-            { value: '480p', text: '480p' },
-            { value: '360p', text: '360p' },
-        ],
-        image: [],
+    let selectedPlatform = 'youtube';
+    let availableFormats = [];
+
+    const staticQualityOptions = {
+        mp3: ["320kb/s", "256kb/s", "128kb/s", "96kb/s"],
+        mp4: ["1080p", "720p", "480p", "360p"],
     };
 
-    const platformsWithImage = ['instagram', 'facebook', 'tiktok', 'snapchat', 'x-twitter', 'linkedin', 'pinterest'];
-    const noQualitySelection = ['facebook', 'instagram', 'tiktok', 'snapchat', 'x-twitter', 'linkedin', 'pinterest'];
-    let selectedPlatform = 'youtube';
-
-    function updateContentTypeOptions() {
-        const imageOption = typeSelect.querySelector('option[value="image"]');
-        if (platformsWithImage.includes(selectedPlatform)) {
-            if (!imageOption) {
-                const opt = document.createElement('option');
-                opt.value = 'image';
-                opt.textContent = 'Image';
-                typeSelect.appendChild(opt);
-            }
-        } else {
-            if (imageOption) {
-                typeSelect.removeChild(imageOption);
-            }
-        }
-    }
-
-    function updateQualityOptions() {
+    function updateQualityOptionsForStatic() {
         const format = typeSelect.value;
         qualitySelect.innerHTML = '';
 
-        if (format === 'image' || noQualitySelection.includes(selectedPlatform)) {
+        if (format === 'image' || ['instagram', 'facebook', 'tiktok', 'snapchat', 'x-twitter', 'linkedin', 'pinterest'].includes(selectedPlatform)) {
             qualityGroup.style.display = 'none';
             return;
         }
 
         qualityGroup.style.display = 'flex';
-        qualityOptions[format].forEach(option => {
+        const options = staticQualityOptions[format];
+        options.forEach(optionText => {
             const opt = document.createElement('option');
-            opt.value = option.value;
-            opt.textContent = option.text;
+            opt.value = optionText;
+            opt.textContent = optionText;
             qualitySelect.appendChild(opt);
         });
+    }
 
-        if (format === 'mp3') {
-            qualitySelect.value = '320';
-        } else {
-            qualitySelect.value = '1080p';
+    function populateQualityOptionsFromDynamic(formats) {
+        qualitySelect.innerHTML = '';
+        qualityGroup.style.display = 'flex';
+
+        availableFormats = formats;
+
+        if (availableFormats.length === 0) {
+            qualityGroup.style.display = 'none';
+            return;
+        }
+
+        availableFormats.forEach(format => {
+            const opt = document.createElement('option');
+            opt.value = format.id;
+            opt.textContent = format.text;
+            qualitySelect.appendChild(opt);
+        });
+    }
+
+    async function fetchYouTubeFormats() {
+        const url = urlInput.value;
+        if (!url || selectedPlatform !== 'youtube' || (!url.includes('youtube.com') && !url.includes('youtu.be'))) {
+            return;
+        }
+
+        downloaderSection.style.display = 'none';
+        convertingSection.style.display = 'block';
+
+        try {
+            const response = await fetch('/api/get-formats', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url }),
+            });
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to fetch formats.');
+            }
+            const formats = await response.json();
+            populateQualityOptionsFromDynamic(formats);
+        } catch (error) {
+            alert(error.message);
+            resetUI();
+        } finally {
+            downloaderSection.style.display = 'block';
+            convertingSection.style.display = 'none';
         }
     }
+
+    urlInput.addEventListener('paste', () => {
+        setTimeout(fetchYouTubeFormats, 100);
+    });
+    urlInput.addEventListener('input', fetchYouTubeFormats);
+
 
     function handlePlatformSelection(platform) {
         selectedPlatform = platform;
@@ -85,14 +107,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon.classList.add('active');
             }
         });
-        updateContentTypeOptions();
-        updateQualityOptions();
+
+        const typeGroup = document.querySelector('.option-group:has(#type-select)');
+
+        if (platform === 'youtube') {
+            typeGroup.style.display = 'none';
+            fetchYouTubeFormats();
+        } else {
+            typeGroup.style.display = 'flex';
+            updateQualityOptionsForStatic();
+        }
     }
 
     platformIcons.forEach(icon => {
         icon.addEventListener('click', () => {
             const platform = icon.dataset.platform;
-            if (icon.classList.contains('premium')) {
+             if (icon.classList.contains('premium')) {
                 alert('This is a premium platform. Please sign up to continue.');
                 window.location.href = 'signup.html';
                 return;
@@ -101,20 +131,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    typeSelect.addEventListener('change', updateQualityOptions);
+    typeSelect.addEventListener('change', () => {
+        if (selectedPlatform !== 'youtube') {
+            updateQualityOptionsForStatic();
+        }
+    });
 
-    convertBtn.addEventListener('click', () => {
+    function resetUI() {
+        urlInput.value = '';
+        downloaderSection.style.display = 'block';
+        infoSection.style.display = 'block';
+        supportedSites.style.display = 'block';
+        convertingSection.style.display = 'none';
+        downloadStartedSection.style.display = 'none';
+        convertBtn.disabled = false;
+        convertBtn.textContent = 'Convert';
+    }
+
+    convertBtn.addEventListener('click', async () => {
         const url = urlInput.value;
-        const type = typeSelect.value;
-        const quality = qualitySelect.value;
-
         if (!url) {
             alert('Please paste a link first!');
-            return;
-        }
-
-        if (url.match(/\.(jpeg|jpg|gif|png)$/) != null && type !== 'image') {
-            alert('You have pasted an image link. Please select the "Image" content type.');
             return;
         }
 
@@ -122,67 +159,91 @@ document.addEventListener('DOMContentLoaded', () => {
         infoSection.style.display = 'none';
         supportedSites.style.display = 'none';
         convertingSection.style.display = 'block';
+        convertingSection.querySelector('h2').textContent = 'Processing...';
 
-        fetch('/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, type, quality, platform: selectedPlatform }),
-        })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(errData => {
-                    throw new Error(errData.error || 'An unknown server error occurred.');
+        if (selectedPlatform === 'youtube') {
+            try {
+                const formatId = qualitySelect.value;
+                const response = await fetch('/api/get-download-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, formatId }),
                 });
-            }
-            const disposition = response.headers.get('Content-Disposition');
-            let filename = 'download';
-            if (disposition && disposition.indexOf('attachment') !== -1) {
-                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                const matches = filenameRegex.exec(disposition);
-                if (matches != null && matches[1]) {
-                    filename = matches[1].replace(/['"]/g, '');
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || 'Failed to get download URL.');
                 }
-            }
-            return Promise.all([response.blob(), Promise.resolve(filename)]);
-        })
-        .then(([blob, filename]) => {
-            const a = document.createElement('a');
-            const objectUrl = URL.createObjectURL(blob);
-            a.href = objectUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
+                const { downloadUrl } = await response.json();
 
-            setTimeout(() => {
+                const selectedFormat = availableFormats.find(f => f.id === formatId);
+                const fileExtension = selectedFormat.type === 'audio' ? 'mp3' : 'mp4';
+                const safeTitle = (document.title || 'download').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+                const filename = `JusDown - ${safeTitle}.${fileExtension}`;
+
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
                 document.body.removeChild(a);
-                URL.revokeObjectURL(objectUrl);
-            }, 100);
 
-            convertingSection.style.display = 'none';
-            downloadStartedSection.style.display = 'block';
-        })
-        .catch(error => {
-            // Display the specific error message from the server
-            alert(error.message);
-            urlInput.value = '';
-            downloaderSection.style.display = 'block';
-            infoSection.style.display = 'block';
-            supportedSites.style.display = 'block';
-            convertingSection.style.display = 'none';
-        });
+                convertingSection.style.display = 'none';
+                downloadStartedSection.style.display = 'block';
+
+            } catch (error) {
+                alert(error.message);
+                resetUI();
+            }
+        } else {
+            // Legacy download logic for other platforms
+            const type = typeSelect.value;
+            const quality = qualitySelect.value;
+
+            fetch('/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, type, quality, platform: selectedPlatform }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.error || 'An unknown server error occurred.');
+                    });
+                }
+                const disposition = response.headers.get('Content-Disposition');
+                let filename = 'download';
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                return Promise.all([response.blob(), Promise.resolve(filename)]);
+            })
+            .then(([blob, filename]) => {
+                const a = document.createElement('a');
+                const objectUrl = URL.createObjectURL(blob);
+                a.href = objectUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(objectUrl);
+                }, 100);
+                convertingSection.style.display = 'none';
+                downloadStartedSection.style.display = 'block';
+            })
+            .catch(error => {
+                alert(error.message);
+                resetUI();
+            });
+        }
     });
 
-    convertNextBtn.addEventListener('click', () => {
-        urlInput.value = '';
-        downloaderSection.style.display = 'block';
-        infoSection.style.display = 'block';
-        supportedSites.style.display = 'block';
-        downloadStartedSection.style.display = 'none';
-        convertBtn.disabled = false;
-        convertBtn.textContent = 'Convert';
-    });
+    convertNextBtn.addEventListener('click', resetUI);
 
-    updateContentTypeOptions();
-    updateQualityOptions();
     handlePlatformSelection(selectedPlatform);
+    updateQualityOptionsForStatic();
 });

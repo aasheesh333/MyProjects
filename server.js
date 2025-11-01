@@ -47,8 +47,113 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.post('/api/get-download-url', async (req, res) => {
+    const { url, formatId } = req.body;
+
+    if (!url || !formatId) {
+        return res.status(400).json({ error: 'URL and Format ID are required' });
+    }
+
+    const requestDir = path.join(TEMP_DIR, uuidv4());
+    fs.mkdirSync(requestDir);
+
+    try {
+        let ytdlpArgs = {
+            format: formatId,
+            getUrl: true,
+        };
+        ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
+
+        const downloadUrl = await ytdlp(url, ytdlpArgs);
+        res.json({ downloadUrl });
+    } catch (error) {
+        console.error('Error getting download URL:', error);
+        res.status(500).json({ error: 'Could not get download URL.' });
+    }
+});
+
+app.post('/api/get-formats', async (req, res) => {
+    const { url } = req.body;
+
+    if (!url || (!url.includes('youtube.com') && !url.includes('youtu.be'))) {
+        return res.status(400).json({ error: 'A valid YouTube URL is required' });
+    }
+
+    const requestDir = path.join(TEMP_DIR, uuidv4());
+    fs.mkdirSync(requestDir);
+
+    try {
+        let ytdlpArgs = { listFormats: true };
+        ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
+
+        const output = await ytdlp(url, ytdlpArgs);
+
+        const formats = [];
+        const lines = output.split('\n');
+        let tableStarted = false;
+
+        const videoTargets = [1080, 720, 480, 360];
+        const audioTargets = [320, 256, 128, 96];
+
+        for (const line of lines) {
+            if (line.startsWith('ID')) {
+                tableStarted = true;
+                continue;
+            }
+            if (!tableStarted || line.trim() === '') continue;
+
+            const parts = line.split(/\s+/).filter(Boolean);
+            const id = parts[0];
+            const ext = parts[1];
+
+            // Audio Only Formats
+            if (line.includes('audio only')) {
+                const abrMatch = line.match(/(\d+)k/);
+                if (abrMatch) {
+                    const abr = parseInt(abrMatch[1], 10);
+                    for (const target of audioTargets) {
+                        if (abr >= target - 20 && abr <= target + 20) {
+                            formats.push({ id, text: `Audio ${target}k (${ext.toUpperCase()})`, type: 'audio', quality: target });
+                            break;
+                        }
+                    }
+                }
+            }
+            // Video Formats (prefer ones with audio)
+            else if (parts[2] && parts[2].includes('x') && !line.includes('video only')) {
+                const height = parseInt(parts[2].split('x')[1], 10);
+                for (const target of videoTargets) {
+                    if (height === target) {
+                        formats.push({ id, text: `Video ${target}p (${ext.toUpperCase()})`, type: 'video', quality: target });
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Deduplicate and sort
+        const uniqueFormats = formats.filter((v, i, a) => a.findIndex(t => (t.text === v.text)) === i);
+        uniqueFormats.sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'video' ? -1 : 1;
+            return b.quality - a.quality;
+        });
+
+        res.json(uniqueFormats);
+
+    } catch (error) {
+        console.error('Error fetching formats:', error);
+        res.status(500).json({ error: 'Could not fetch video formats. The URL might be invalid or private.' });
+    }
+});
+
 app.post('/download', async (req, res) => {
     const { url, type: contentType, quality, platform } = req.body;
+
+    if (platform === 'youtube') {
+        // This is now handled by the new API endpoints, so we can ignore it here.
+        // Or return an error, just in case the frontend sends a request here by mistake.
+        return res.status(400).json({ error: 'YouTube downloads are handled by a different process.' });
+    }
 
     if (!url) {
         return res.status(400).json({ error: 'URL is required' });
