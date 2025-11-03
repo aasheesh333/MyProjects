@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const archiver = require('archiver');
 const ytdlp = require('yt-dlp-exec');
 const axios = require('axios');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 // --- Configure FFmpeg ---
 process.env.FFMPEG_PATH = require('ffmpeg-static');
@@ -29,7 +30,10 @@ const addYoutubeOptions = (ytdlpArgs, requestDir) => {
     ytdlpArgs.geoBypass = true;
     ytdlpArgs.geoBypassCountry = 'US';
     ytdlpArgs.forceIpv4 = true;
-    if (process.env.YOUTUBE_COOKIES_PATH) {
+
+    if (process.env.PROXY_URL) {
+        ytdlpArgs.proxy = process.env.PROXY_URL;
+    } else if (process.env.YOUTUBE_COOKIES_PATH) {
         const tempCookiePath = path.join(requestDir, 'cookies.txt');
         fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
         ytdlpArgs.cookies = tempCookiePath;
@@ -179,13 +183,19 @@ app.post('/download', async (req, res) => {
                 const postId = postIdMatch[1];
                 const apiUrl = `https://www.instagram.com/p/${postId}/?__a=1&__d=dis`;
 
-                const response = await axios.get(apiUrl, {
+                const axiosConfig = {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
                         'Accept-Language': 'en-US,en;q=0.9',
                         'Referer': 'https://www.instagram.com/',
                     }
-                });
+                };
+
+                if (process.env.PROXY_URL) {
+                    axiosConfig.httpsAgent = new HttpsProxyAgent(process.env.PROXY_URL);
+                }
+
+                const response = await axios.get(apiUrl, axiosConfig);
 
                 if (!response.data || !response.data.items || response.data.items.length === 0) {
                     cleanup();
@@ -225,9 +235,14 @@ app.post('/download', async (req, res) => {
                     const archive = archiver('zip');
                     archive.pipe(output);
 
+                    const axiosConfig = { responseType: 'arraybuffer' };
+                    if (process.env.PROXY_URL) {
+                        axiosConfig.httpsAgent = new HttpsProxyAgent(process.env.PROXY_URL);
+                    }
+
                     for (let i = 0; i < mediaUrls.length; i++) {
                         const mediaUrl = mediaUrls[i];
-                        const fileResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                        const fileResponse = await axios.get(mediaUrl, axiosConfig);
                         const extension = isVideoRequest ? 'mp4' : 'jpg';
                         archive.append(fileResponse.data, { name: `media_${i + 1}.${extension}` });
                     }
@@ -243,7 +258,11 @@ app.post('/download', async (req, res) => {
                     });
                 } else {
                     const mediaUrl = mediaUrls[0];
-                    const fileResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                    const axiosConfig = { responseType: 'arraybuffer' };
+                    if (process.env.PROXY_URL) {
+                        axiosConfig.httpsAgent = new HttpsProxyAgent(process.env.PROXY_URL);
+                    }
+                    const fileResponse = await axios.get(mediaUrl, axiosConfig);
                     const extension = isVideoRequest ? 'mp4' : 'jpg';
                     const filename = `JusDown_Instagram_${uuidv4()}.${extension}`;
                     const finalFilepath = path.join(requestDir, filename);
@@ -269,6 +288,10 @@ app.post('/download', async (req, res) => {
                     ],
                 };
 
+                if (process.env.PROXY_URL) {
+                    ytdlpArgs.proxy = process.env.PROXY_URL;
+                }
+
                 if (url.includes('youtube.com') || url.includes('youtu.be')) {
                     ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
                 }
@@ -292,9 +315,14 @@ app.post('/download', async (req, res) => {
 
                     archive.pipe(output);
 
+                    const axiosConfig = { responseType: 'arraybuffer' };
+                    if (process.env.PROXY_URL) {
+                        axiosConfig.httpsAgent = new HttpsProxyAgent(process.env.PROXY_URL);
+                    }
+
                     for (let i = 0; i < mediaUrls.length; i++) {
                         const imageUrl = mediaUrls[i];
-                        const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                        const response = await axios.get(imageUrl, axiosConfig);
                         archive.append(response.data, { name: `image_${i + 1}.jpg` });
                     }
 
@@ -310,7 +338,11 @@ app.post('/download', async (req, res) => {
                     });
                 } else {
                     const imageUrl = mediaUrls[0];
-                    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                    const axiosConfig = { responseType: 'arraybuffer' };
+                    if (process.env.PROXY_URL) {
+                        axiosConfig.httpsAgent = new HttpsProxyAgent(process.env.PROXY_URL);
+                    }
+                    const response = await axios.get(imageUrl, axiosConfig);
                     const filename = `JusDown_Image_${uuidv4()}.jpg`;
                     const finalFilepath = path.join(requestDir, filename);
                     fs.writeFileSync(finalFilepath, response.data);
@@ -332,6 +364,10 @@ app.post('/download', async (req, res) => {
                     'Referer: https://www.google.com/',
                 ],
             };
+
+            if (process.env.PROXY_URL) {
+                ytdlpArgs.proxy = process.env.PROXY_URL;
+            }
 
             if (url.includes('youtube.com') || url.includes('youtu.be')) {
                 ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
