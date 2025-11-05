@@ -7,6 +7,11 @@ const ytdlp = require('yt-dlp-exec');
 const axios = require('axios');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 
+let Youtube;
+import('youtubei.js').then(youtube => {
+    Youtube = youtube;
+});
+
 // --- Configure FFmpeg ---
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 process.env.FFPROBE_PATH = require('ffprobe-static');
@@ -20,29 +25,6 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR);
 }
 
-// --- Helper Functions ---
-const addYoutubeOptions = (ytdlpArgs, requestDir) => {
-    ytdlpArgs.addHeader = [
-        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept-Language: en-US,en;q=0.9',
-        'Referer: https://www.youtube.com/',
-    ];
-    ytdlpArgs.geoBypass = true;
-    ytdlpArgs.geoBypassCountry = 'US';
-    ytdlpArgs.forceIpv4 = true;
-
-    if (process.env.PROXY_URL) {
-        ytdlpArgs.proxy = process.env.PROXY_URL;
-    } else if (process.env.YOUTUBE_COOKIES_PATH) {
-        const tempCookiePath = path.join(requestDir, 'cookies.txt');
-        fs.copyFileSync(process.env.YOUTUBE_COOKIES_PATH, tempCookiePath);
-        ytdlpArgs.cookies = tempCookiePath;
-    } else {
-        ytdlpArgs.extractorArgs = 'youtube:player_client=android;youtube:skip=authcheck';
-    }
-    return ytdlpArgs;
-};
-
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use('/static', express.static(path.join(__dirname, 'static')));
@@ -52,26 +34,25 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/get-download-url', async (req, res) => {
-    const { url, formatId } = req.body;
+    const { url, formatId } = req.body; // formatId is now the itag
 
     if (!url || !formatId) {
-        return res.status(400).json({ error: 'URL and Format ID are required' });
+        return res.status(400).json({ error: 'URL and Format ID (itag) are required' });
     }
 
-    const requestDir = path.join(TEMP_DIR, uuidv4());
-    fs.mkdirSync(requestDir);
-
     try {
-        let ytdlpArgs = {
-            format: formatId,
-            getUrl: true,
-        };
-        ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
+        const video = await Youtube.default.getVideo(url);
+        const allFormats = (video.streamingData.formats || []).concat(video.streamingData.adaptiveFormats || []);
 
-        const downloadUrl = await ytdlp(url, ytdlpArgs);
-        res.json({ downloadUrl });
+        const format = allFormats.find(f => f.itag == formatId);
+
+        if (!format || !format.url) {
+            return res.status(404).json({ error: 'Selected format not found or is invalid.' });
+        }
+
+        res.json({ downloadUrl: format.url });
     } catch (error) {
-        console.error('Error getting download URL:', error);
+        console.error('Error getting download URL with youtubei.js:', error);
         res.status(500).json({ error: 'Could not get download URL.' });
     }
 });
@@ -83,57 +64,27 @@ app.post('/api/get-formats', async (req, res) => {
         return res.status(400).json({ error: 'A valid YouTube URL is required' });
     }
 
-    const requestDir = path.join(TEMP_DIR, uuidv4());
-    fs.mkdirSync(requestDir);
-
     try {
-        let ytdlpArgs = { listFormats: true };
-        ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
-
-        const output = await ytdlp(url, ytdlpArgs);
+        const video = await Youtube.default.getVideo(url);
+        const allFormats = (video.streamingData.formats || []).concat(video.streamingData.adaptiveFormats || []);
 
         const formats = [];
-        const lines = output.split('\n');
-        let tableStarted = false;
 
-        const videoTargets = [1080, 720, 480, 360];
-        const audioTargets = [320, 256, 128, 96];
-
-        for (const line of lines) {
-            if (line.startsWith('ID')) {
-                tableStarted = true;
-                continue;
+        // Video Formats (with or without audio)
+        allFormats.filter(f => f.mimeType.includes('video/mp4')).forEach(format => {
+            if (format.qualityLabel) { // e.g., "720p"
+                const text = `Video ${format.qualityLabel}` + (format.audioBitrate ? '' : ' (No Audio)');
+                formats.push({ id: format.itag, text: text, type: 'video', quality: parseInt(format.qualityLabel) });
             }
-            if (!tableStarted || line.trim() === '') continue;
+        });
 
-            const parts = line.split(/\s+/).filter(Boolean);
-            const id = parts[0];
-            const ext = parts[1];
-
-            // Audio Only Formats
-            if (line.includes('audio only')) {
-                const abrMatch = line.match(/(\d+)k/);
-                if (abrMatch) {
-                    const abr = parseInt(abrMatch[1], 10);
-                    for (const target of audioTargets) {
-                        if (abr >= target - 20 && abr <= target + 20) {
-                            formats.push({ id, text: `Audio ${target}k (${ext.toUpperCase()})`, type: 'audio', quality: target });
-                            break;
-                        }
-                    }
-                }
+        // Audio Only Formats
+        allFormats.filter(f => f.mimeType.includes('audio/mp4')).forEach(format => {
+            if (format.audioBitrate) {
+                const bitrate = Math.round(format.audioBitrate / 1000);
+                formats.push({ id: format.itag, text: `Audio ${bitrate}k (M4A)`, type: 'audio', quality: bitrate });
             }
-            // Video Formats (prefer ones with audio)
-            else if (parts[2] && parts[2].includes('x') && !line.includes('video only')) {
-                const height = parseInt(parts[2].split('x')[1], 10);
-                for (const target of videoTargets) {
-                    if (height === target) {
-                        formats.push({ id, text: `Video ${target}p (${ext.toUpperCase()})`, type: 'video', quality: target });
-                        break;
-                    }
-                }
-            }
-        }
+        });
 
         // Deduplicate and sort
         const uniqueFormats = formats.filter((v, i, a) => a.findIndex(t => (t.text === v.text)) === i);
@@ -143,10 +94,9 @@ app.post('/api/get-formats', async (req, res) => {
         });
 
         res.json(uniqueFormats);
-
     } catch (error) {
-        console.error('Error fetching formats:', error);
-        res.status(500).json({ error: 'Could not fetch video formats. The URL might be invalid or private.' });
+        console.error('Error fetching formats with youtubei.js:', error);
+        res.status(500).json({ error: 'Could not fetch video formats. The URL might be invalid, private, or age-restricted.' });
     }
 });
 
@@ -292,10 +242,6 @@ app.post('/download', async (req, res) => {
                     ytdlpArgs.proxy = process.env.PROXY_URL;
                 }
 
-                if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                    ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
-                }
-
                 const output = await ytdlp(url, ytdlpArgs);
 
                 const data = JSON.parse(output);
@@ -367,10 +313,6 @@ app.post('/download', async (req, res) => {
 
             if (process.env.PROXY_URL) {
                 ytdlpArgs.proxy = process.env.PROXY_URL;
-            }
-
-            if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                ytdlpArgs = addYoutubeOptions(ytdlpArgs, requestDir);
             }
 
             if (contentType === 'mp3') {
