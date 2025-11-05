@@ -10,7 +10,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { Innertube } = require('youtubei.js');
 
 (async () => {
-    const innertube = await Innertube.create();
+    const innertube = await Innertube.create({ clientName: 'ANDROID' });
 
     // --- Configure FFmpeg ---
     process.env.FFMPEG_PATH = require('ffmpeg-static');
