@@ -64,29 +64,56 @@ app.get('/', (req, res) => {
             return res.status(400).json({ error: 'A valid YouTube URL is required' });
         }
 
+        let formats = [];
         try {
-            const video = await innertube.getBasicInfo(url);
-            const allFormats = video.streaming_data.adaptive_formats;
-
-            const formats = [];
-
-        // Video Formats (with or without audio)
-        allFormats.filter(f => f.mimeType.includes('video/mp4')).forEach(format => {
-            if (format.qualityLabel) { // e.g., "720p"
-                const text = `Video ${format.qualityLabel}` + (format.audioBitrate ? '' : ' (No Audio)');
-                formats.push({ id: format.itag, text: text, type: 'video', quality: parseInt(format.qualityLabel) });
+            const info = await innertube.getBasicInfo(url);
+            if (!info.streaming_data) {
+                throw new Error('No streaming data found, falling back to yt-dlp.');
             }
-        });
 
-        // Audio Only Formats
-        allFormats.filter(f => f.mimeType.includes('audio/mp4')).forEach(format => {
-            if (format.audioBitrate) {
-                const bitrate = Math.round(format.audioBitrate / 1000);
-                formats.push({ id: format.itag, text: `Audio ${bitrate}k (M4A)`, type: 'audio', quality: bitrate });
+            const allFormats = info.streaming_data.adaptive_formats;
+            allFormats.filter(f => f.mimeType.includes('video/mp4')).forEach(format => {
+                if (format.qualityLabel) {
+                    const text = `Video ${format.qualityLabel}` + (format.audioBitrate ? '' : ' (No Audio)');
+                    formats.push({ id: format.itag, text: text, type: 'video', quality: parseInt(format.qualityLabel) });
+                }
+            });
+            allFormats.filter(f => f.mimeType.includes('audio/mp4')).forEach(format => {
+                if (format.audioBitrate) {
+                    const bitrate = Math.round(format.audioBitrate / 1000);
+                    formats.push({ id: format.itag, text: `Audio ${bitrate}k (M4A)`, type: 'audio', quality: bitrate });
+                }
+            });
+        } catch (youtubeiError) {
+            try {
+                const output = await ytdlp.exec(url, {
+                    dumpSingleJson: true,
+                    noWarnings: true,
+                });
+                const videoInfo = JSON.parse(output.stdout);
+                videoInfo.formats.forEach(format => {
+                    if (format.vcodec !== 'none' && format.acodec !== 'none' && format.ext === 'mp4') {
+                        formats.push({
+                            id: format.format_id,
+                            text: `Video ${format.height}p`,
+                            type: 'video',
+                            quality: format.height,
+                        });
+                    } else if (format.vcodec === 'none' && format.acodec !== 'none' && format.ext === 'm4a') {
+                        formats.push({
+                            id: format.format_id,
+                            text: `Audio ${Math.round(format.abr)}kb/s (M4A)`,
+                            type: 'audio',
+                            quality: format.abr,
+                        });
+                    }
+                });
+            } catch (ytdlpError) {
+                console.error('yt-dlp fallback failed:', ytdlpError);
+                return res.status(500).json({ error: 'Could not fetch video formats. The URL might be invalid, private, or age-restricted.' });
             }
-        });
+        }
 
-        // Deduplicate and sort
         const uniqueFormats = formats.filter((v, i, a) => a.findIndex(t => (t.text === v.text)) === i);
         uniqueFormats.sort((a, b) => {
             if (a.type !== b.type) return a.type === 'video' ? -1 : 1;
@@ -94,10 +121,6 @@ app.get('/', (req, res) => {
         });
 
         res.json(uniqueFormats);
-    } catch (error) {
-        console.error('Error fetching formats with youtubei.js:', error);
-        res.status(500).json({ error: 'Could not fetch video formats. The URL might be invalid, private, or age-restricted.' });
-    }
 });
 
 app.post('/download', async (req, res) => {
