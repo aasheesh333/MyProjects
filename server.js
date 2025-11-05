@@ -9,8 +9,6 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const { Innertube } = require('youtubei.js');
 
-let innertube;
-
 (async () => {
     const innertube = await Innertube.create();
 
