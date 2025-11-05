@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const youtubeUrl = urlParams.get('url');
 
-    let videoInfo = null; // To store video info and reuse it
+    let videoTitle = '';
 
     if (!youtubeUrl) {
         downloaderSection.innerHTML = '<h2>Error: No YouTube URL provided. Please go back and try again.</h2>';
@@ -18,43 +18,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     videoUrlDisplay.textContent = `URL: ${youtubeUrl}`;
 
-    async function initializeDownloader() {
+    async function fetchFormatsFromServer() {
         try {
-            const innertube = await Innertube.create({ clientName: "WEB" }); // Use WEB client for browser
-            videoInfo = await innertube.getBasicInfo(youtubeUrl);
+            const response = await fetch('/api/youtube-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: youtubeUrl }),
+            });
 
-            const formats = videoInfo.streaming_data.adaptive_formats || [];
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to fetch formats from server.');
+            }
+
+            const data = await response.json();
+            videoTitle = data.title;
+            const formats = data.formats || [];
 
             qualitySelect.innerHTML = ''; // Clear "Loading..."
 
             if (formats.length === 0) {
-                 qualitySelect.innerHTML = '<option>No formats found.</option>';
-                 convertBtn.disabled = true;
-                 return;
+                qualitySelect.innerHTML = '<option>No formats found.</option>';
+                convertBtn.disabled = true;
+                return;
             }
 
-            // Populate video formats
-            formats
-                .filter(f => f.mime_type.includes('video/mp4') && f.quality_label)
-                .sort((a, b) => b.height - a.height)
-                .forEach(format => {
-                    const option = document.createElement('option');
-                    option.value = format.itag;
-                    option.textContent = `Video ${format.quality_label}` + (format.audio_channels ? '' : ' (No Audio)');
-                    qualitySelect.appendChild(option);
-                });
-
-            // Populate audio formats
-            formats
-                .filter(f => f.mime_type.includes('audio/mp4'))
-                .sort((a, b) => b.bitrate - a.bitrate)
-                .forEach(format => {
-                    const option = document.createElement('option');
-                    option.value = format.itag;
-                    const bitrate = Math.round(format.bitrate / 1000);
-                    option.textContent = `Audio ${bitrate}kbps (M4A)`;
-                    qualitySelect.appendChild(option);
-                });
+            formats.forEach(format => {
+                const option = document.createElement('option');
+                option.value = format.url;
+                option.textContent = format.text;
+                qualitySelect.appendChild(option);
+            });
 
         } catch (error) {
             console.error('Error fetching formats:', error);
@@ -64,47 +58,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    initializeDownloader();
+    fetchFormatsFromServer();
 
     convertBtn.addEventListener('click', () => {
-        const selectedItag = qualitySelect.value;
-        if (!selectedItag || !videoInfo) return;
-
-        try {
-            convertBtn.textContent = 'Generating...';
-            convertBtn.disabled = true;
-
-            const format = videoInfo.streaming_data.adaptive_formats.find(f => f.itag == selectedItag);
-
-            if (!format || !format.url) {
-                 throw new Error('Selected format is not available. Please try another.');
-            }
-
-            // The URL is directly available in the browser context, no deciphering needed
-            const downloadUrl = format.url;
-
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            // Add title and extension for a clean filename
-            const fileExtension = format.mime_type.includes('video') ? 'mp4' : 'm4a';
-            const safeTitle = (videoInfo.basic_info.title || 'download').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-            a.download = `${safeTitle}.${fileExtension}`;
-
-            // This is a workaround for cross-origin download issues
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
-            downloaderSection.style.display = 'none';
-            downloadStartedSection.style.display = 'block';
-
-        } catch (error) {
-            console.error('Download error:', error);
-            alert(`Failed to get download link: ${error.message}`);
-            convertBtn.textContent = 'Download';
-            convertBtn.disabled = false;
+        const downloadUrl = qualitySelect.value;
+        if (!downloadUrl) {
+            alert('Please select a format to download.');
+            return;
         }
+
+        const selectedOptionText = qualitySelect.options[qualitySelect.selectedIndex].text;
+        const fileExtension = selectedOptionText.includes('Video') ? 'mp4' : 'm4a';
+        const safeTitle = (videoTitle || 'download').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${safeTitle}.${fileExtension}`;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        downloaderSection.style.display = 'none';
+        downloadStartedSection.style.display = 'block';
     });
 
     convertNextBtn.addEventListener('click', () => {

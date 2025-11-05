@@ -6,55 +6,111 @@ const archiver = require('archiver');
 const ytdlp = require('yt-dlp-exec');
 const axios = require('axios');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const { Innertube } = require('youtubei.js');
 
-// --- Configure FFmpeg ---
-process.env.FFMPEG_PATH = require('ffmpeg-static');
-process.env.FFPROBE_PATH = require('ffprobe-static');
+(async () => {
+    // --- Configure FFmpeg ---
+    process.env.FFMPEG_PATH = require('ffmpeg-static');
+    process.env.FFPROBE_PATH = require('ffprobe-static');
 
-const app = express();
-const PORT = process.env.PORT || 5001;
+    const app = express();
+    const PORT = process.env.PORT || 5001;
 
-// --- Setup Temporary Directory ---
-const TEMP_DIR = path.join(__dirname, 'temp_downloads');
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR);
-}
-
-app.use(express.json());
-app.use(express.static(__dirname));
-app.use('/static', express.static(path.join(__dirname, 'static')));
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/download.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'download.html'));
-});
-
-
-app.post('/download', async (req, res) => {
-    const { url, type: contentType, quality, platform } = req.body;
-
-    if (platform === 'youtube') {
-        return res.status(400).json({ error: 'YouTube downloads are now handled client-side.' });
+    // --- YouTube Setup ---
+    const youtube = await Innertube.create();
+    if (process.env.PROXY_URL) {
+        youtube.session.proxies = process.env.PROXY_URL;
     }
 
-    if (!url) {
-        return res.status(400).json({ error: 'URL is required' });
+    // --- Setup Temporary Directory ---
+    const TEMP_DIR = path.join(__dirname, 'temp_downloads');
+    if (!fs.existsSync(TEMP_DIR)) {
+        fs.mkdirSync(TEMP_DIR);
     }
 
-    const requestDir = path.join(TEMP_DIR, uuidv4());
-    fs.mkdirSync(requestDir);
+    app.use(express.json());
+    app.use(express.static(__dirname));
+    app.use('/static', express.static(path.join(__dirname, 'static')));
 
-    const cleanup = () => {
-        if (fs.existsSync(requestDir)) {
-            fs.rm(requestDir, { recursive: true, force: true }, () => {});
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    });
+
+    app.get('/download.html', (req, res) => {
+        res.sendFile(path.join(__dirname, 'download.html'));
+    });
+
+    // --- New YouTube Info Endpoint ---
+    app.post('/api/youtube-info', async (req, res) => {
+        const { url } = req.body;
+        if (!url || (!url.includes('youtube.com') && !url.includes('youtu.be'))) {
+            return res.status(400).json({ error: 'A valid YouTube URL is required' });
         }
-    };
 
-    try {
-        if (platform === 'instagram') {
+        try {
+            const video = await youtube.getBasicInfo(url);
+            const formats = video.streaming_data.adaptive_formats || [];
+
+            const processedFormats = [];
+
+            // Process video formats
+            formats
+                .filter(f => f.mime_type.includes('video/mp4') && f.quality_label)
+                .sort((a, b) => b.height - a.height)
+                .forEach(format => {
+                    processedFormats.push({
+                        text: `Video ${format.quality_label}` + (format.audio_channels ? '' : ' (No Audio)'),
+                        url: format.url,
+                        type: 'video',
+                        quality: format.height
+                    });
+                });
+
+            // Process audio formats
+            formats
+                .filter(f => f.mime_type.includes('audio/mp4'))
+                .sort((a, b) => b.bitrate - a.bitrate)
+                .forEach(format => {
+                    const bitrate = Math.round(format.bitrate / 1000);
+                    processedFormats.push({
+                        text: `Audio ${bitrate}kbps (M4A)`,
+                        url: format.url,
+                        type: 'audio',
+                        quality: bitrate
+                    });
+                });
+
+            res.json({ title: video.basic_info.title, formats: processedFormats });
+
+        } catch (error) {
+            console.error('Error fetching YouTube info:', error);
+            res.status(500).json({ error: 'Could not fetch video formats. The video may be private, age-restricted, or unavailable.' });
+        }
+    });
+
+
+    app.post('/download', async (req, res) => {
+        const { url, type: contentType, quality, platform } = req.body;
+
+        if (platform === 'youtube') {
+            return res.status(400).json({ error: 'YouTube downloads are handled differently now.' });
+        }
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL is required' });
+        }
+
+        const requestDir = path.join(TEMP_DIR, uuidv4());
+        fs.mkdirSync(requestDir);
+
+        const cleanup = () => {
+            if (fs.existsSync(requestDir)) {
+                fs.rm(requestDir, { recursive: true, force: true }, () => {});
+            }
+        };
+
+        try {
+            if (platform === 'instagram') {
             try {
                 const postIdMatch = url.match(/(?:p|reel)\/([A-Za-z0-9-_]+)/);
                 if (!postIdMatch) {
@@ -286,8 +342,9 @@ app.post('/download', async (req, res) => {
         }
         return res.status(500).json({ error: 'An unexpected error occurred. Please check the link or try again.' });
     }
-});
+    });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+    app.listen(PORT, () => {
+        console.log(`Server is running on http://localhost:${PORT}`);
+    });
+})();
