@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JusDown - Download Your Video</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <header>
+        <h1>JusDown</h1>
+        <nav>
+            <a href="signup.html" class="button">Sign Up</a>
+        </nav>
+    </header>
+    <main class="content-wrapper">
+        <section class="downloader" id="downloader-section">
+            <h2>Your YouTube Download</h2>
+            <p id="video-url-display"></p>
+            <div class="downloader-controls">
+                <div class="option-group" id="quality-group">
+                    <label for="quality-select">Select Format:</label>
+                    <select id="quality-select">
+                        <option>Loading formats...</option>
+                    </select>
+                </div>
+                <button id="convert-btn">Download</button>
+            </div>
+        </section>
+
+        <section id="download-started-section" style="display: none;">
+            <h2>Your download has started!</h2>
+            <button id="convert-next-btn">Convert Another</button>
+        </section>
+
+    </main>
+    <footer>
+        <p>&copy; 2024 JusDown. All rights reserved.</p>
+    </footer>
+    <script src="https://cdn.jsdelivr.net/npm/youtubei.js@latest/bundle/youtubei.js"></script>
+    <script src="static/download.js"></script>
+</body>
+</html>

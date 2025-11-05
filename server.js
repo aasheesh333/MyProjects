@@ -7,16 +7,11 @@ const ytdlp = require('yt-dlp-exec');
 const axios = require('axios');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 
-const { Innertube } = require('youtubei.js');
+// --- Configure FFmpeg ---
+process.env.FFMPEG_PATH = require('ffmpeg-static');
+process.env.FFPROBE_PATH = require('ffprobe-static');
 
-(async () => {
-    const innertube = await Innertube.create({ clientName: "ANDROID", retrieve_player: true });
-
-    // --- Configure FFmpeg ---
-    process.env.FFMPEG_PATH = require('ffmpeg-static');
-    process.env.FFPROBE_PATH = require('ffprobe-static');
-
-    const app = express();
+const app = express();
 const PORT = process.env.PORT || 5001;
 
 // --- Setup Temporary Directory ---
@@ -33,103 +28,16 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-    app.post('/api/get-download-url', async (req, res) => {
-        const { url, formatId } = req.body; // formatId is now the itag
-
-        if (!url || !formatId) {
-            return res.status(400).json({ error: 'URL and Format ID (itag) are required' });
-        }
-
-        try {
-            const video = await innertube.getBasicInfo(url);
-            const allFormats = video.streaming_data.adaptive_formats;
-
-            const format = allFormats.find(f => f.itag == formatId);
-
-        if (!format || !format.url) {
-            return res.status(404).json({ error: 'Selected format not found or is invalid.' });
-        }
-
-        res.json({ downloadUrl: format.url });
-    } catch (error) {
-        console.error('Error getting download URL with youtubei.js:', error);
-        res.status(500).json({ error: 'Could not get download URL.' });
-    }
+app.get('/download.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'download.html'));
 });
 
-    app.post('/api/get-formats', async (req, res) => {
-        const { url } = req.body;
-
-        if (!url || (!url.includes('youtube.com') && !url.includes('youtu.be'))) {
-            return res.status(400).json({ error: 'A valid YouTube URL is required' });
-        }
-
-        let formats = [];
-        try {
-            const info = await innertube.getBasicInfo(url);
-            if (!info.streaming_data) {
-                throw new Error('No streaming data found, falling back to yt-dlp.');
-            }
-
-            const allFormats = info.streaming_data.adaptive_formats;
-            allFormats.filter(f => f.mimeType.includes('video/mp4')).forEach(format => {
-                if (format.qualityLabel) {
-                    const text = `Video ${format.qualityLabel}` + (format.audioBitrate ? '' : ' (No Audio)');
-                    formats.push({ id: format.itag, text: text, type: 'video', quality: parseInt(format.qualityLabel) });
-                }
-            });
-            allFormats.filter(f => f.mimeType.includes('audio/mp4')).forEach(format => {
-                if (format.audioBitrate) {
-                    const bitrate = Math.round(format.audioBitrate / 1000);
-                    formats.push({ id: format.itag, text: `Audio ${bitrate}k (M4A)`, type: 'audio', quality: bitrate });
-                }
-            });
-        } catch (youtubeiError) {
-            try {
-                const output = await ytdlp.exec(url, {
-                    dumpSingleJson: true,
-                    noWarnings: true,
-                });
-                const videoInfo = JSON.parse(output.stdout);
-                videoInfo.formats.forEach(format => {
-                    if (format.vcodec !== 'none' && format.acodec !== 'none' && format.ext === 'mp4') {
-                        formats.push({
-                            id: format.format_id,
-                            text: `Video ${format.height}p`,
-                            type: 'video',
-                            quality: format.height,
-                        });
-                    } else if (format.vcodec === 'none' && format.acodec !== 'none' && format.ext === 'm4a') {
-                        formats.push({
-                            id: format.format_id,
-                            text: `Audio ${Math.round(format.abr)}kb/s (M4A)`,
-                            type: 'audio',
-                            quality: format.abr,
-                        });
-                    }
-                });
-            } catch (ytdlpError) {
-                console.error('yt-dlp fallback failed:', ytdlpError);
-                return res.status(500).json({ error: 'Could not fetch video formats. The URL might be invalid, private, or age-restricted.' });
-            }
-        }
-
-        const uniqueFormats = formats.filter((v, i, a) => a.findIndex(t => (t.text === v.text)) === i);
-        uniqueFormats.sort((a, b) => {
-            if (a.type !== b.type) return a.type === 'video' ? -1 : 1;
-            return b.quality - a.quality;
-        });
-
-        res.json(uniqueFormats);
-});
 
 app.post('/download', async (req, res) => {
     const { url, type: contentType, quality, platform } = req.body;
 
     if (platform === 'youtube') {
-        // This is now handled by the new API endpoints, so we can ignore it here.
-        // Or return an error, just in case the frontend sends a request here by mistake.
-        return res.status(400).json({ error: 'YouTube downloads are handled by a different process.' });
+        return res.status(400).json({ error: 'YouTube downloads are now handled client-side.' });
     }
 
     if (!url) {
@@ -380,7 +288,6 @@ app.post('/download', async (req, res) => {
     }
 });
 
-    app.listen(PORT, () => {
-        console.log(`Server is running on http://localhost:${PORT}`);
-    });
-})();
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
