@@ -45,21 +45,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function populateQualityOptionsFromDynamic(formats) {
+    function populateYouTubeQualityOptions() {
+        const selectedType = typeSelect.value;
         qualitySelect.innerHTML = '';
         qualityGroup.style.display = 'flex';
 
-        youtubeFormats = formats;
+        const filteredFormats = youtubeFormats.filter(f => f.type === selectedType);
 
-        if (youtubeFormats.length === 0) {
-            qualityGroup.style.display = 'none';
+        if (filteredFormats.length === 0) {
+            qualitySelect.innerHTML = '<option>No formats found</option>';
+            convertBtn.disabled = true;
             return;
         }
 
-        youtubeFormats.forEach((format, index) => {
+        convertBtn.disabled = false;
+        filteredFormats.forEach((format, index) => {
             const opt = document.createElement('option');
-            opt.value = index; // Use index to find the format later
-            opt.textContent = format.text;
+            opt.value = format.url;
+            opt.textContent = format.text.replace(/Video|Audio|\(|\)/g, '').trim(); // Clean up text for display
+            opt.selected = (selectedType === 'mp3' && format.quality.includes('320')) || (selectedType === 'mp4' && index === 0);
             qualitySelect.appendChild(opt);
         });
     }
@@ -85,7 +89,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const data = await response.json();
             videoTitle = data.title;
-            populateQualityOptionsFromDynamic(data.formats);
+            // Map to a more consistent format for the frontend
+            youtubeFormats = data.formats.map(f => ({
+                text: f.text,
+                url: f.url,
+                type: f.text.toLowerCase().includes('video') ? 'mp4' : 'mp3',
+                quality: f.text.split(' ')[1] || ''
+            }));
+            populateYouTubeQualityOptions();
         } catch (error) {
             alert(error.message);
             resetUI();
@@ -113,8 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const typeGroup = document.querySelector('.option-group:has(#type-select)');
 
         if (platform === 'youtube') {
-            typeGroup.style.display = 'none';
-            fetchYouTubeFormats();
+            typeGroup.style.display = 'flex'; // Always show for YouTube
+            qualityGroup.style.display = 'flex'; // Always show for YouTube
+            fetchYouTubeFormats(); // Fetch formats if a URL is already present
         } else {
             typeGroup.style.display = 'flex';
             updateQualityOptionsForStatic();
@@ -134,13 +146,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     typeSelect.addEventListener('change', () => {
-        if (selectedPlatform !== 'youtube') {
+        if (selectedPlatform === 'youtube') {
+            populateYouTubeQualityOptions();
+        } else {
             updateQualityOptionsForStatic();
         }
     });
 
     function resetUI() {
         urlInput.value = '';
+        youtubeFormats = [];
         downloaderSection.style.display = 'block';
         infoSection.style.display = 'block';
         supportedSites.style.display = 'block';
@@ -148,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadStartedSection.style.display = 'none';
         convertBtn.disabled = false;
         convertBtn.textContent = 'Convert';
+        handlePlatformSelection('youtube'); // Reset to default
     }
 
     convertBtn.addEventListener('click', async () => {
@@ -158,20 +174,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (selectedPlatform === 'youtube') {
-            const selectedFormatIndex = qualitySelect.value;
-            const selectedFormat = youtubeFormats[selectedFormatIndex];
+            const downloadUrl = qualitySelect.value;
+            const selectedOption = qualitySelect.options[qualitySelect.selectedIndex];
+            const formatText = selectedOption.textContent;
 
-            if (!selectedFormat || !selectedFormat.url) {
+            if (!downloadUrl) {
                 alert('Please select a valid format.');
                 return;
             }
 
             const a = document.createElement('a');
-            a.href = selectedFormat.url;
+            a.href = downloadUrl;
 
-            const fileExtension = selectedFormat.type === 'video' ? 'mp4' : 'm4a';
+            const fileExtension = typeSelect.value === 'mp3' ? 'mp3' : 'mp4';
             const safeTitle = (videoTitle || 'download').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-            a.download = `${safeTitle}.${fileExtension}`;
+            a.download = `${safeTitle} - ${formatText}.${fileExtension}`;
 
             a.target = '_blank';
             document.body.appendChild(a);
@@ -236,6 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     convertNextBtn.addEventListener('click', resetUI);
 
+    // Initial setup
     handlePlatformSelection(selectedPlatform);
-    updateQualityOptionsForStatic();
 });
