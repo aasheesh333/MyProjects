@@ -61,9 +61,9 @@ document.addEventListener('DOMContentLoaded', () => {
         convertBtn.disabled = false;
         filteredFormats.forEach((format, index) => {
             const opt = document.createElement('option');
-            opt.value = format.url;
+            opt.value = format.id; // Use format.id instead of format.url
             opt.textContent = format.text.replace(/Video|Audio|\(|\)/g, '').trim(); // Clean up text for display
-            opt.selected = (selectedType === 'mp3' && format.quality.includes('320')) || (selectedType === 'mp4' && index === 0);
+            opt.selected = index === 0; // The best quality is always first
             qualitySelect.appendChild(opt);
         });
     }
@@ -92,9 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Map to a more consistent format for the frontend
             youtubeFormats = data.formats.map(f => ({
                 text: f.text,
-                url: f.url,
-                type: f.text.toLowerCase().includes('video') ? 'mp4' : 'mp3',
-                quality: f.text.split(' ')[1] || ''
+                id: f.id, // Changed from url to id
+                type: f.type === 'video' ? 'mp4' : 'mp3',
+                quality: f.quality
             }));
             populateYouTubeQualityOptions();
         } catch (error) {
@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const typeGroup = document.querySelector('.option-group:has(#type-select)');
 
         if (platform === 'youtube') {
+            typeSelect.value = 'mp3'; // Default to MP3 for YouTube
             typeGroup.style.display = 'flex'; // Always show for YouTube
             qualityGroup.style.display = 'flex'; // Always show for YouTube
             fetchYouTubeFormats(); // Fetch formats if a URL is already present
@@ -174,29 +175,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (selectedPlatform === 'youtube') {
-            const downloadUrl = qualitySelect.value;
-            const selectedOption = qualitySelect.options[qualitySelect.selectedIndex];
-            const formatText = selectedOption.textContent;
-
-            if (!downloadUrl) {
+            const formatId = qualitySelect.value;
+            if (!formatId) {
                 alert('Please select a valid format.');
                 return;
             }
 
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-
-            const fileExtension = typeSelect.value === 'mp3' ? 'mp3' : 'mp4';
-            const safeTitle = (videoTitle || 'download').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-            a.download = `${safeTitle} - ${formatText}.${fileExtension}`;
-
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
             downloaderSection.style.display = 'none';
-            downloadStartedSection.style.display = 'block';
+            convertingSection.style.display = 'block';
+            convertingSection.querySelector('h2').textContent = 'Preparing Download...';
+            convertingSection.querySelector('p').textContent = 'Your download will begin shortly.';
+
+
+            try {
+                const response = await fetch('/api/requestDownload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, formatId }),
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || 'Failed to get the final download link.');
+                }
+
+                const data = await response.json();
+                window.location.href = data.finalDownloadUrl;
+
+                convertingSection.style.display = 'none';
+                downloadStartedSection.style.display = 'block';
+
+            } catch (error) {
+                alert(error.message);
+                resetUI();
+            }
 
         } else {
             // Legacy download logic for other platforms

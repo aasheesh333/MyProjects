@@ -50,17 +50,20 @@ app.post('/api/get-formats', async (req, res) => {
 
         const formats = [];
         videoInfo.formats.forEach(format => {
+            // Ensure format_id is present
+            if (!format.format_id) return;
+
             if (format.vcodec !== 'none' && format.acodec !== 'none' && format.ext === 'mp4') {
                 formats.push({
                     text: `Video ${format.height}p`,
-                    url: format.url,
+                    id: format.format_id, // Use format_id instead of URL
                     type: 'video',
                     quality: format.height,
                 });
             } else if (format.vcodec === 'none' && format.acodec !== 'none' && (format.ext === 'm4a' || format.ext === 'mp3')) {
                 formats.push({
                     text: `Audio ${Math.round(format.abr)}kb/s (${format.ext.toUpperCase()})`,
-                    url: format.url,
+                    id: format.format_id, // Use format_id instead of URL
                     type: 'audio',
                     quality: format.abr,
                 });
@@ -80,6 +83,35 @@ app.post('/api/get-formats', async (req, res) => {
     }
 });
 
+app.post('/api/requestDownload', async (req, res) => {
+    const { url, formatId } = req.body;
+    if (!url || !formatId) {
+        return res.status(400).json({ error: 'URL and formatId are required' });
+    }
+
+    try {
+        const ytdlpArgs = {
+            dumpSingleJson: true,
+            format: formatId,
+        };
+
+        if (process.env.PROXY_URL) {
+            ytdlpArgs.proxy = process.env.PROXY_URL;
+        }
+
+        const output = await ytdlp.exec(url, ytdlpArgs);
+        const formatInfo = JSON.parse(output.stdout);
+
+        if (!formatInfo.url) {
+            return res.status(500).json({ error: 'Could not find download URL for the selected format.' });
+        }
+
+        res.json({ finalDownloadUrl: formatInfo.url });
+    } catch (error) {
+        console.error('Error fetching final download URL:', error);
+        res.status(500).json({ error: 'Failed to retrieve the final download link.' });
+    }
+});
 
 app.post('/download', async (req, res) => {
     const { url, type: contentType, quality, platform } = req.body;
