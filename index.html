@@ -50,16 +50,11 @@
                 <div class="option-group" id="quality-group">
                     <label for="quality-select">Quality:</label>
                     <select id="quality-select">
-                        <!-- MP3 Bitrates -->
-                        <option value="320kb/s" selected>320kb/s</option>
-                        <option value="256kb/s">256kb/s</option>
-                        <option value="128kb/s">128kb/s</option>
-                        <option value="96kb/s">96kb/s</option>
-                        <!-- MP4 Resolutions (will be shown/hidden by JS) -->
-                        <option value="1080p" style="display: none;">1080p</option>
-                        <option value="720p" style="display: none;">720p</option>
-                        <option value="480p" style="display: none;">480p</option>
-                        <option value="360p" style="display: none;">360p</option>
+                        <!-- Static options for the new workflow -->
+                        <option value="best" data-type="mp3">Best Audio (M4A)</option>
+                        <option value="720p" data-type="mp4" style="display: none;">720p</option>
+                        <option value="480p" data-type="mp4" style="display: none;">480p</option>
+                        <option value="360p" data-type="mp4" style="display: none;">360p</option>
                     </select>
                 </div>
                 <button id="convert-btn">Convert</button>
