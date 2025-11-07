@@ -50,15 +50,20 @@
                 <div class="option-group" id="quality-group">
                     <label for="quality-select">Quality:</label>
                     <select id="quality-select">
-                        <!-- Static options for the new workflow -->
-                        <option value="best" data-type="mp3">Best Audio (M4A)</option>
-                        <option value="720p" data-type="mp4" style="display: none;">720p</option>
-                        <option value="480p" data-type="mp4" style="display: none;">480p</option>
-                        <option value="360p" data-type="mp4" style="display: none;">360p</option>
+                        <!-- Static options for the new server-side workflow -->
+                        <option value="320" data-type="mp3">320 kbps</option>
+                        <option value="256" data-type="mp3">256 kbps</option>
+                        <option value="128" data-type="mp3">128 kbps</option>
+                        <option value="96" data-type="mp3">96 kbps</option>
+                        <option value="1080" data-type="mp4" style="display: none;">1080p</option>
+                        <option value="720" data-type="mp4" style="display: none;">720p</option>
+                        <option value="480" data-type="mp4" style="display: none;">480p</option>
+                        <option value="360" data-type="mp4" style="display: none;">360p</option>
                     </select>
                 </div>
                 <button id="convert-btn">Convert</button>
             </div>
+            <p class="info-message">Note: High-quality conversions use free public proxies and may be slow or fail occasionally. Please be patient or try again.</p>
         </section>
 
         <section id="download-started-section" style="display: none;">

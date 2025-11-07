@@ -9,27 +9,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadStartedSection = document.getElementById('download-started-section');
     const convertNextBtn = document.getElementById('convert-next-btn');
 
+    // Add a new element for conversion progress messages
+    const processingMessage = document.createElement('p');
+    processingMessage.id = 'processing-message';
+    processingMessage.style.display = 'none';
+    convertBtn.parentNode.insertBefore(processingMessage, convertBtn.nextSibling);
+
     let selectedPlatform = 'youtube';
 
-    // --- New Simplified UI Logic ---
-
     function updateQualityDropdown() {
-        const selectedType = typeSelect.value; // 'mp3' or 'mp4'
-
-        // Hide all options first
+        const selectedType = typeSelect.value;
         qualityOptions.forEach(option => {
-            option.style.display = 'none';
+            option.style.display = option.dataset.type === selectedType ? 'block' : 'none';
         });
-
-        // Show options that match the selected content type
-        const relevantOptions = Array.from(qualityOptions).filter(option => option.dataset.type === selectedType);
-        relevantOptions.forEach(option => {
-            option.style.display = 'block';
-        });
-
-        // Select the first visible option by default
-        if (relevantOptions.length > 0) {
-            qualitySelect.value = relevantOptions[0].value;
+        const firstVisibleOption = Array.from(qualityOptions).find(o => o.style.display !== 'none');
+        if (firstVisibleOption) {
+            qualitySelect.value = firstVisibleOption.value;
         }
     }
 
@@ -39,31 +34,23 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedPlatform = platform;
         platformIcons.forEach(icon => {
             icon.classList.remove('active');
-            if (icon.dataset.platform === platform) {
-                icon.classList.add('active');
-            }
+            if (icon.dataset.platform === platform) icon.classList.add('active');
         });
 
-        // For now, the new logic only applies to YouTube.
-        // Other platforms can have their own logic added here later.
+        // This logic is for YouTube, other platforms can be handled here
         if (platform === 'youtube') {
-            typeSelect.value = 'mp3'; // Default to MP3
+            document.getElementById('quality-group').style.display = 'flex';
+            typeSelect.value = 'mp4'; // Default to MP4
             updateQualityDropdown();
         } else {
-            // Hide quality for non-YouTube platforms for now
-             document.getElementById('quality-group').style.display = 'none';
+            // For simplicity, hide quality selection for other platforms
+            document.getElementById('quality-group').style.display = 'none';
         }
     }
 
     platformIcons.forEach(icon => {
         icon.addEventListener('click', () => {
-            const platform = icon.dataset.platform;
-            if (icon.classList.contains('premium')) {
-                alert('This is a premium platform. Please sign up to continue.');
-                window.location.href = 'signup.html';
-                return;
-            }
-            handlePlatformSelection(platform);
+            handlePlatformSelection(icon.dataset.platform);
         });
     });
 
@@ -77,41 +64,51 @@ document.addEventListener('DOMContentLoaded', () => {
         const originalBtnText = convertBtn.textContent;
         convertBtn.textContent = 'Processing...';
         convertBtn.disabled = true;
+        processingMessage.textContent = 'Your download will begin shortly. High-quality conversions may take several minutes...';
+        processingMessage.style.display = 'block';
 
         try {
-            if (selectedPlatform === 'youtube') {
-                const quality = qualitySelect.value;
-                const type = typeSelect.value;
+            const quality = qualitySelect.value;
+            const type = typeSelect.value;
 
-                const response = await fetch('/api/get-link', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, quality, type, platform: selectedPlatform }),
-                });
+            const response = await fetch('/api/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, quality, type }),
+            });
 
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.error || 'An unknown server error occurred.');
-                }
-
-                const data = await response.json();
-
-                // Redirect to start the download
-                window.location.href = data.downloadUrl;
-
-                downloaderSection.style.display = 'none';
-                downloadStartedSection.style.display = 'block';
-
-            } else {
-                // Here you could add the logic for other platforms using the old /download endpoint if needed
-                alert('This feature is currently only available for YouTube.');
+            if (!response.ok) {
+                 const errData = await response.json();
+                throw new Error(errData.error || 'A server error occurred.');
             }
+
+            const blob = await response.blob();
+            const header = response.headers.get('Content-Disposition');
+            const parts = header.split(';');
+            let filename = 'download';
+            parts.forEach(part => {
+                if (part.trim().startsWith('filename=')) {
+                    filename = part.split('=')[1].replace(/"/g, '');
+                }
+            });
+
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = decodeURIComponent(filename);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+
+            downloaderSection.style.display = 'none';
+            downloadStartedSection.style.display = 'block';
+
         } catch (error) {
-            alert(error.message);
+            alert(`Error: ${error.message}`);
         } finally {
-            // Reset button state
             convertBtn.textContent = originalBtnText;
             convertBtn.disabled = false;
+            processingMessage.style.display = 'none';
         }
     });
 
@@ -119,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.value = '';
         downloaderSection.style.display = 'block';
         downloadStartedSection.style.display = 'none';
-        handlePlatformSelection('youtube'); // Reset to default
+        handlePlatformSelection('youtube');
     }
 
     convertNextBtn.addEventListener('click', resetUI);
