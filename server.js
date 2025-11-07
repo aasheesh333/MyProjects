@@ -4,6 +4,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const ytdlp = require('yt-dlp-exec');
 const axios = require('axios');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -22,41 +23,57 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Dynamic Free Proxy Management ---
-let proxyList = [];
+// --- Intelligent Free Proxy Management ---
 const PROXY_LIST_URL = 'https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt';
+const PROXY_TEST_URL = 'https://www.google.com/';
+const PROXY_TEST_TIMEOUT = 5000; // 5 seconds
+const PROXY_BATCH_SIZE = 20; // Test 20 proxies at a time
 
-async function fetchProxies() {
+async function getWorkingProxy() {
+    console.log('Fetching and testing proxies...');
+    let proxyList = [];
     try {
-        console.log('Fetching fresh proxy list...');
         const response = await axios.get(PROXY_LIST_URL);
-        const data = response.data;
-        // Split the text file by new lines and filter out any empty lines
-        proxyList = data.split('\n').filter(p => p.trim() !== '');
-        console.log(`Successfully fetched ${proxyList.length} proxies.`);
+        proxyList = response.data.split('\n').filter(p => p.trim() !== '');
+        console.log(`Fetched ${proxyList.length} proxies.`);
     } catch (error) {
         console.error('Failed to fetch proxy list:', error.message);
-        // Fallback to an empty list if fetching fails
-        proxyList = [];
+        throw new Error('Could not fetch the list of available proxies.');
+    }
+
+    if (proxyList.length === 0) {
+        throw new Error('Proxy list is empty.');
+    }
+
+    // Shuffle the list to test different proxies each time
+    for (let i = proxyList.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [proxyList[i], proxyList[j]] = [proxyList[j], proxyList[i]];
+    }
+
+    const batch = proxyList.slice(0, PROXY_BATCH_SIZE);
+
+    const testPromises = batch.map(proxyAddress => {
+        const proxyUrl = `http://${proxyAddress}`;
+        const agent = new HttpsProxyAgent(proxyUrl);
+        return axios.get(PROXY_TEST_URL, { httpsAgent: agent, timeout: PROXY_TEST_TIMEOUT })
+            .then(() => proxyUrl) // If successful, resolve with the proxy URL
+            .catch(() => Promise.reject()); // If it fails, reject the promise
+    });
+
+    try {
+        const workingProxy = await Promise.any(testPromises);
+        console.log(`Found working proxy: ${workingProxy}`);
+        return workingProxy;
+    } catch (error) {
+        throw new Error(`No working proxies found in the batch of ${PROXY_BATCH_SIZE}. Please try again.`);
     }
 }
 
-function getRandomProxy() {
-    if (proxyList.length === 0) {
-        return null;
-    }
-    const randomIndex = Math.floor(Math.random() * proxyList.length);
-    // Proxies in the list are in host:port format, which is what yt-dlp expects
-    return `http://${proxyList[randomIndex]}`;
-}
 
 // --- Universal Download Endpoint ---
 app.post('/api/download', async (req, res) => {
-    // Fetch a fresh list of proxies for every single request
-    await fetchProxies();
-
     const { url, quality, type } = req.body;
-
     if (!url || !quality || !type) {
         return res.status(400).json({ error: 'URL, quality, and type are required' });
     }
@@ -71,52 +88,43 @@ app.post('/api/download', async (req, res) => {
     };
 
     try {
-        const proxy = getRandomProxy();
-        if (!proxy) {
-            return res.status(500).json({ error: 'No available proxies to process the request. Please try again in a moment.' });
-        }
-        console.log(`Using proxy: ${proxy}`);
+        const proxy = await getWorkingProxy();
 
         const ytdlpArgs = {
             output: path.join(requestDir, '%(title)s.%(ext)s'),
             proxy: proxy,
             ffmpegLocation: require('ffmpeg-static'),
-            noCheckCertificate: true, // Crucial for unreliable proxies
+            noCheckCertificate: true,
         };
 
-        let formatSelector = '';
         if (type === 'mp3') {
-            formatSelector = 'bestaudio';
+            ytdlpArgs.format = 'bestaudio';
             ytdlpArgs.extractAudio = true;
             ytdlpArgs.audioFormat = 'mp3';
             ytdlpArgs.audioQuality = `${quality}K`;
         } else { // mp4
-            formatSelector = `bestvideo[height<=${parseInt(quality)}]+bestaudio/best`;
+            ytdlpArgs.format = `bestvideo[height<=${parseInt(quality)}]+bestaudio/best`;
         }
-        ytdlpArgs.format = formatSelector;
 
         await ytdlp.exec(url, ytdlpArgs);
 
         const files = fs.readdirSync(requestDir);
         if (files.length === 0) {
-            cleanup();
-            return res.status(500).json({ error: 'Download failed. yt-dlp did not produce a file.' });
+            throw new Error('Download failed. yt-dlp did not produce a file.');
         }
 
         const downloadedFile = files[0];
         const finalFilepath = path.join(requestDir, downloadedFile);
 
         res.download(finalFilepath, downloadedFile, (err) => {
-            if (err) {
-                console.error('Error sending file to user:', err);
-            }
+            if (err) console.error('Error sending file to user:', err);
             cleanup();
         });
 
     } catch (error) {
         console.error('Processing error:', error);
         cleanup();
-        res.status(500).json({ error: 'Failed to process your request. The public proxy may be unreliable or the content may be unavailable. Please try again.' });
+        res.status(500).json({ error: error.message || 'An unexpected error occurred.' });
     }
 });
 
