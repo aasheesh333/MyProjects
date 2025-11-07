@@ -80,6 +80,7 @@ app.post('/api/download', async (req, res) => {
             output: path.join(requestDir, '%(title)s.%(ext)s'),
             proxy: proxy,
             ffmpegLocation: require('ffmpeg-static'),
+            noCheckCertificate: true,
         };
 
         let formatSelector = '';
