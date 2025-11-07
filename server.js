@@ -23,16 +23,16 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Background Proxy Polling ---
+// --- Speed-Biased Background Proxy Polling ---
 const PROXY_LIST_URL = 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt';
 const PROXY_TEST_URL = 'http://httpbin.org/get';
-const PROXY_TEST_TIMEOUT = 10000; // 10 seconds
-const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const PROXY_TEST_TIMEOUT = 10000;
+const POLL_INTERVAL = 5 * 60 * 1000;
 
-let workingProxies = [];
+let workingProxies = []; // Now an array of { url: string, speed: number }
 
 async function pollProxies() {
-    console.log('Starting proxy poll...');
+    console.log('Starting speed-biased proxy poll...');
     let fullProxyList = [];
     try {
         const response = await axios.get(PROXY_LIST_URL);
@@ -43,27 +43,35 @@ async function pollProxies() {
         return;
     }
 
-    const testPromises = fullProxyList.map(proxyAddress => {
+    const testPromises = fullProxyList.map(async (proxyAddress) => {
         const proxyUrl = `http://${proxyAddress}`;
         const agent = new HttpsProxyAgent(proxyUrl);
-        return axios.get(PROXY_TEST_URL, { httpsAgent: agent, timeout: PROXY_TEST_TIMEOUT })
-            .then(() => proxyUrl)
-            .catch(() => null); // Return null for failed proxies
+        const startTime = Date.now();
+        try {
+            await axios.get(PROXY_TEST_URL, { httpsAgent: agent, timeout: PROXY_TEST_TIMEOUT });
+            const endTime = Date.now();
+            return { url: proxyUrl, speed: endTime - startTime };
+        } catch {
+            return null;
+        }
     });
 
     const results = await Promise.all(testPromises);
     const newWorkingProxies = results.filter(p => p !== null);
 
-    console.log(`Proxy poll complete. Found ${newWorkingProxies.length} working proxies.`);
+    // Sort by speed (ascending)
+    newWorkingProxies.sort((a, b) => a.speed - b.speed);
+
+    console.log(`Proxy poll complete. Found ${newWorkingProxies.length} working proxies. Fastest is ${newWorkingProxies[0]?.speed}ms.`);
     workingProxies = newWorkingProxies;
 }
 
-function getRandomWorkingProxy() {
-    if (workingProxies.length === 0) {
-        return null;
+function getFastestProxy() {
+    // shift() removes and returns the first element (the fastest proxy)
+    if (workingProxies.length > 0) {
+        return workingProxies.shift().url;
     }
-    const randomIndex = Math.floor(Math.random() * workingProxies.length);
-    return workingProxies[randomIndex];
+    return null;
 }
 
 // --- Universal Download Endpoint ---
@@ -83,11 +91,13 @@ app.post('/api/download', async (req, res) => {
     };
 
     try {
-        const proxy = getRandomWorkingProxy();
+        const proxy = getFastestProxy();
         if (!proxy) {
-            return res.status(500).json({ error: 'There are currently no working proxies available. The server is refreshing the list, please try again in a few minutes.' });
+             // If the list is exhausted, trigger a poll and ask the user to wait.
+            pollProxies();
+            return res.status(503).json({ error: 'There are currently no working proxies available. The server is refreshing the list, please try again in a few minutes.' });
         }
-        console.log(`Using pre-vetted proxy: ${proxy}`);
+        console.log(`Using fastest available proxy: ${proxy}`);
 
         const ytdlpArgs = {
             output: path.join(requestDir, '%(title)s.%(ext)s'),
@@ -101,16 +111,14 @@ app.post('/api/download', async (req, res) => {
             ytdlpArgs.extractAudio = true;
             ytdlpArgs.audioFormat = 'mp3';
             ytdlpArgs.audioQuality = `${quality}K`;
-        } else { // mp4
+        } else {
             ytdlpArgs.format = `bestvideo[height<=${parseInt(quality)}]+bestaudio/best`;
         }
 
         await ytdlp.exec(url, ytdlpArgs);
 
         const files = fs.readdirSync(requestDir);
-        if (files.length === 0) {
-            throw new Error('Download failed. yt-dlp did not produce a file.');
-        }
+        if (files.length === 0) throw new Error('Download failed. yt-dlp did not produce a file.');
 
         const downloadedFile = files[0];
         const finalFilepath = path.join(requestDir, downloadedFile);
@@ -130,7 +138,6 @@ app.post('/api/download', async (req, res) => {
 // --- Server Startup ---
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    // Run the proxy poll immediately on startup, then on the defined interval
     pollProxies();
     setInterval(pollProxies, POLL_INTERVAL);
 });
