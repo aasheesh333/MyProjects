@@ -24,7 +24,7 @@ app.get('/', (req, res) => {
 });
 
 // --- Background Proxy Polling ---
-const PROXY_LIST_URL = 'https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt';
+const PROXY_LIST_URL = 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt';
 const PROXY_TEST_URL = 'http://httpbin.org/get';
 const PROXY_TEST_TIMEOUT = 10000; // 10 seconds
 const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
