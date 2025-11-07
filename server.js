@@ -23,53 +23,48 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Intelligent Free Proxy Management ---
+// --- Background Proxy Polling ---
 const PROXY_LIST_URL = 'https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt';
-const PROXY_TEST_URL = 'https://www.google.com/';
-const PROXY_TEST_TIMEOUT = 5000; // 5 seconds
-const PROXY_BATCH_SIZE = 20; // Test 20 proxies at a time
+const PROXY_TEST_URL = 'http://httpbin.org/get';
+const PROXY_TEST_TIMEOUT = 10000; // 10 seconds
+const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-async function getWorkingProxy() {
-    console.log('Fetching and testing proxies...');
-    let proxyList = [];
+let workingProxies = [];
+
+async function pollProxies() {
+    console.log('Starting proxy poll...');
+    let fullProxyList = [];
     try {
         const response = await axios.get(PROXY_LIST_URL);
-        proxyList = response.data.split('\n').filter(p => p.trim() !== '');
-        console.log(`Fetched ${proxyList.length} proxies.`);
+        fullProxyList = response.data.split('\n').filter(p => p.trim() !== '');
+        console.log(`Fetched ${fullProxyList.length} proxies to test.`);
     } catch (error) {
-        console.error('Failed to fetch proxy list:', error.message);
-        throw new Error('Could not fetch the list of available proxies.');
+        console.error('Failed to fetch proxy list for polling:', error.message);
+        return;
     }
 
-    if (proxyList.length === 0) {
-        throw new Error('Proxy list is empty.');
-    }
-
-    // Shuffle the list to test different proxies each time
-    for (let i = proxyList.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [proxyList[i], proxyList[j]] = [proxyList[j], proxyList[i]];
-    }
-
-    const batch = proxyList.slice(0, PROXY_BATCH_SIZE);
-
-    const testPromises = batch.map(proxyAddress => {
+    const testPromises = fullProxyList.map(proxyAddress => {
         const proxyUrl = `http://${proxyAddress}`;
         const agent = new HttpsProxyAgent(proxyUrl);
         return axios.get(PROXY_TEST_URL, { httpsAgent: agent, timeout: PROXY_TEST_TIMEOUT })
-            .then(() => proxyUrl) // If successful, resolve with the proxy URL
-            .catch(() => Promise.reject()); // If it fails, reject the promise
+            .then(() => proxyUrl)
+            .catch(() => null); // Return null for failed proxies
     });
 
-    try {
-        const workingProxy = await Promise.any(testPromises);
-        console.log(`Found working proxy: ${workingProxy}`);
-        return workingProxy;
-    } catch (error) {
-        throw new Error(`No working proxies found in the batch of ${PROXY_BATCH_SIZE}. Please try again.`);
-    }
+    const results = await Promise.all(testPromises);
+    const newWorkingProxies = results.filter(p => p !== null);
+
+    console.log(`Proxy poll complete. Found ${newWorkingProxies.length} working proxies.`);
+    workingProxies = newWorkingProxies;
 }
 
+function getRandomWorkingProxy() {
+    if (workingProxies.length === 0) {
+        return null;
+    }
+    const randomIndex = Math.floor(Math.random() * workingProxies.length);
+    return workingProxies[randomIndex];
+}
 
 // --- Universal Download Endpoint ---
 app.post('/api/download', async (req, res) => {
@@ -88,7 +83,11 @@ app.post('/api/download', async (req, res) => {
     };
 
     try {
-        const proxy = await getWorkingProxy();
+        const proxy = getRandomWorkingProxy();
+        if (!proxy) {
+            return res.status(500).json({ error: 'There are currently no working proxies available. The server is refreshing the list, please try again in a few minutes.' });
+        }
+        console.log(`Using pre-vetted proxy: ${proxy}`);
 
         const ytdlpArgs = {
             output: path.join(requestDir, '%(title)s.%(ext)s'),
@@ -131,4 +130,7 @@ app.post('/api/download', async (req, res) => {
 // --- Server Startup ---
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+    // Run the proxy poll immediately on startup, then on the defined interval
+    pollProxies();
+    setInterval(pollProxies, POLL_INTERVAL);
 });
