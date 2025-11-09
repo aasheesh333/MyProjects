@@ -4,7 +4,8 @@
   "description": "A powerful and fast tool to convert and download videos from a huge range of platforms.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx puppeteer browsers install chrome"
   },
   "dependencies": {
     "archiver": "^7.0.1",
