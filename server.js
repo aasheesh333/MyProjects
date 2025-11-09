@@ -3,8 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const ytdlp = require('yt-dlp-exec');
-const axios = require('axios');
-const { HttpsProxyAgent } = require('https-proxy-agent');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -23,56 +22,50 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Speed-Biased Background Proxy Polling ---
-const PROXY_LIST_URL = 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt';
-const PROXY_TEST_URL = 'http://httpbin.org/get';
-const PROXY_TEST_TIMEOUT = 10000;
-const POLL_INTERVAL = 5 * 60 * 1000;
+// --- YouTube Session Management (Direct Scraping) ---
+let youtubeSession = null;
+let lastSessionFetch = 0;
+const SESSION_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-let workingProxies = []; // Now an array of { url: string, speed: number }
+async function getYouTubeSession() {
+    const now = Date.now();
+    if (youtubeSession && (now - lastSessionFetch < SESSION_CACHE_DURATION)) {
+        console.log('Using cached YouTube session.');
+        return youtubeSession;
+    }
 
-async function pollProxies() {
-    console.log('Starting speed-biased proxy poll...');
-    let fullProxyList = [];
+    console.log('Fetching new YouTube session tokens via Puppeteer...');
+    let browser = null;
     try {
-        const response = await axios.get(PROXY_LIST_URL);
-        fullProxyList = response.data.split('\n').filter(p => p.trim() !== '');
-        console.log(`Fetched ${fullProxyList.length} proxies to test.`);
-    } catch (error) {
-        console.error('Failed to fetch proxy list for polling:', error.message);
-        return;
-    }
+        browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+        const page = await browser.newPage();
+        await page.goto('https://www.youtube.com', { waitUntil: 'networkidle2' });
 
-    const testPromises = fullProxyList.map(async (proxyAddress) => {
-        const proxyUrl = `http://${proxyAddress}`;
-        const agent = new HttpsProxyAgent(proxyUrl);
-        const startTime = Date.now();
-        try {
-            await axios.get(PROXY_TEST_URL, { httpsAgent: agent, timeout: PROXY_TEST_TIMEOUT });
-            const endTime = Date.now();
-            return { url: proxyUrl, speed: endTime - startTime };
-        } catch {
-            return null;
+        // Wait for the specific object to be available on the page
+        await page.waitForFunction(() => window.ytInitialData && window.ytInitialData.visitorData);
+
+        const sessionData = await page.evaluate(() => {
+            const visitorData = window.ytInitialData?.visitorData?.visitorData;
+            const poToken = window.ytInitialData?.responseContext?.webResponseContextExtensionData?.ytConfigData?.body?.playerResponse?.args?.po_token;
+            return { visitorData, poToken };
+        });
+
+        if (!sessionData || !sessionData.visitorData || !sessionData.poToken) {
+            throw new Error('Failed to extract valid session tokens from YouTube page.');
         }
-    });
 
-    const results = await Promise.all(testPromises);
-    const newWorkingProxies = results.filter(p => p !== null);
-
-    // Sort by speed (ascending)
-    newWorkingProxies.sort((a, b) => a.speed - b.speed);
-
-    console.log(`Proxy poll complete. Found ${newWorkingProxies.length} working proxies. Fastest is ${newWorkingProxies[0]?.speed}ms.`);
-    workingProxies = newWorkingProxies;
-}
-
-function getFastestProxy() {
-    // shift() removes and returns the first element (the fastest proxy)
-    if (workingProxies.length > 0) {
-        return workingProxies.shift().url;
+        youtubeSession = sessionData;
+        lastSessionFetch = now;
+        console.log('Successfully fetched new YouTube session tokens.');
+        return youtubeSession;
+    } catch (error) {
+        console.error('Fatal error fetching YouTube session with Puppeteer:', error);
+        throw new Error('Could not establish a valid session with YouTube.');
+    } finally {
+        if (browser) await browser.close();
     }
-    return null;
 }
+
 
 // --- Universal Download Endpoint ---
 app.post('/api/download', async (req, res) => {
@@ -91,19 +84,14 @@ app.post('/api/download', async (req, res) => {
     };
 
     try {
-        const proxy = getFastestProxy();
-        if (!proxy) {
-             // If the list is exhausted, trigger a poll and ask the user to wait.
-            pollProxies();
-            return res.status(503).json({ error: 'There are currently no working proxies available. The server is refreshing the list, please try again in a few minutes.' });
-        }
-        console.log(`Using fastest available proxy: ${proxy}`);
+        const session = await getYouTubeSession();
 
         const ytdlpArgs = {
             output: path.join(requestDir, '%(title)s.%(ext)s'),
-            proxy: proxy,
             ffmpegLocation: require('ffmpeg-static'),
             noCheckCertificate: true,
+            sleepInterval: 5,
+            extractorArgs: `youtube:player_client=web;player_client_version=1.2.3;po_token=${session.poToken};visitor_data=${session.visitorData}`,
         };
 
         if (type === 'mp3') {
@@ -138,6 +126,5 @@ app.post('/api/download', async (req, res) => {
 // --- Server Startup ---
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    pollProxies();
-    setInterval(pollProxies, POLL_INTERVAL);
+    getYouTubeSession();
 });
