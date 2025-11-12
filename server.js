@@ -63,7 +63,7 @@ app.post('/api/download', async (req, res) => {
             const lines = String(mp3Output).trim().split('\n');
             title = lines[0];
             ext = 'mp3'; // We will enforce this
-            audioUrl = lines[lines.length - 1];
+            audioUrl = lines.find(line => line.startsWith('http'));
         } else {
             // Get title
             const titleOutput = await ytdlp.exec(url, { proxy, getTitle: true });
@@ -77,7 +77,7 @@ app.post('/api/download', async (req, res) => {
                 getUrl: true,
                 format: `bestvideo[height<=${parseInt(quality)}][ext=mp4]/bestvideo[ext=mp4]`,
             });
-            videoUrl = String(videoOutput).trim().split('\n').pop();
+            videoUrl = String(videoOutput).trim().split('\n').find(line => line.startsWith('http'));
 
             // Get audio URL
             console.log('Fetching audio URL...');
@@ -86,7 +86,7 @@ app.post('/api/download', async (req, res) => {
                 getUrl: true,
                 format: 'bestaudio[ext=m4a]/bestaudio',
             });
-            audioUrl = String(audioOutput).trim().split('\n').pop();
+            audioUrl = String(audioOutput).trim().split('\n').find(line => line.startsWith('http'));
         }
         console.log('Successfully fetched media URLs.');
 
