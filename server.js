@@ -67,7 +67,7 @@ app.post('/api/download', async (req, res) => {
         } else {
             // Get title
             const titleOutput = await ytdlp.exec(url, { proxy, getTitle: true });
-            title = titleOutput.trim().replace(/[<>:"/\\|?*]/g, '_'); // Sanitize title for filename
+            title = String(titleOutput).trim().replace(/[<>:"/\\|?*]/g, '_'); // Sanitize title for filename
             ext = 'mp4'; // We will enforce this
 
             // Get video URL
