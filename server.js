@@ -60,7 +60,7 @@ app.post('/api/download', async (req, res) => {
                 getTitle: true,
                 output: '%(title)s.%(ext)s'
             });
-            const lines = mp3Output.trim().split('\n');
+            const lines = String(mp3Output).trim().split('\n');
             title = lines[0];
             ext = 'mp3'; // We will enforce this
             audioUrl = lines[lines.length - 1];
@@ -77,7 +77,7 @@ app.post('/api/download', async (req, res) => {
                 getUrl: true,
                 format: `bestvideo[height<=${parseInt(quality)}][ext=mp4]/bestvideo[ext=mp4]`,
             });
-            videoUrl = videoOutput.trim().split('\n').pop();
+            videoUrl = String(videoOutput).trim().split('\n').pop();
 
             // Get audio URL
             console.log('Fetching audio URL...');
@@ -86,7 +86,7 @@ app.post('/api/download', async (req, res) => {
                 getUrl: true,
                 format: 'bestaudio[ext=m4a]/bestaudio',
             });
-            audioUrl = audioOutput.trim().split('\n').pop();
+            audioUrl = String(audioOutput).trim().split('\n').pop();
         }
         console.log('Successfully fetched media URLs.');
 
