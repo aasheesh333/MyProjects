@@ -127,9 +127,9 @@ app.post('/api/download', async (req, res) => {
 
         if (type === 'mp3') {
             finalFilepath = path.join(requestDir, `${title}.${ext}`);
-            console.log('Converting to MP3...');
+            console.log(`Converting to MP3 at ${quality}kbps...`);
             await new Promise((resolve, reject) => {
-                const ffmpegCommand = `"${ffmpeg}" -i "${audioPath}" -q:a ${quality === '320' ? 0 : 2} "${finalFilepath}"`;
+                const ffmpegCommand = `"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`;
                 exec(ffmpegCommand, (error, stdout, stderr) => {
                     if (error) {
                         console.error('FFMPEG MP3 Stderr:', stderr);

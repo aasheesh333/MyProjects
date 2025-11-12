@@ -22,9 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
         qualityOptions.forEach(option => {
             option.style.display = option.dataset.type === selectedType ? 'block' : 'none';
         });
-        const firstVisibleOption = Array.from(qualityOptions).find(o => o.style.display !== 'none');
-        if (firstVisibleOption) {
-            qualitySelect.value = firstVisibleOption.value;
+
+        // Explicitly set the default quality for the selected type
+        if (selectedType === 'mp4') {
+            qualitySelect.value = '720';
+        } else if (selectedType === 'mp3') {
+            qualitySelect.value = '128';
         }
     }
 
@@ -40,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // This logic is for YouTube, other platforms can be handled here
         if (platform === 'youtube') {
             document.getElementById('quality-group').style.display = 'flex';
-            typeSelect.value = 'mp4'; // Default to MP4
             updateQualityDropdown();
         } else {
             // For simplicity, hide quality selection for other platforms
@@ -121,6 +123,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     convertNextBtn.addEventListener('click', resetUI);
 
-    // Initial setup
+    // --- Initial Setup ---
+    function initializeDefaults() {
+        typeSelect.value = 'mp3';
+        qualitySelect.value = '128'; // Default MP3 quality
+        updateQualityDropdown();
+    }
+
+    // Set initial state when the page loads
+    initializeDefaults();
+
+    // Also reset to defaults when 'youtube' is selected (or page is reset)
     handlePlatformSelection(selectedPlatform);
 });
