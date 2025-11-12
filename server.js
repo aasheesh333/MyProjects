@@ -7,6 +7,7 @@ const ytdlp = require('yt-dlp-exec');
 const axios = require('axios');
 const { exec } = require('child_process');
 const ffmpeg = require('ffmpeg-static');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -42,10 +43,20 @@ app.post('/api/download', async (req, res) => {
     };
 
     try {
-        const proxy = process.env.PROXY_URL;
-        if (!proxy) {
+        // --- Proxy Rotation Logic ---
+        const proxyString = process.env.PROXY_URL;
+        if (!proxyString) {
             console.warn('PROXY_URL environment variable not set. Downloads may be unreliable.');
         }
+
+        const proxies = proxyString ? proxyString.split(',') : [];
+        const selectedProxy = proxies.length > 0 ? proxies[Math.floor(Math.random() * proxies.length)] : null;
+
+        if (selectedProxy) {
+            console.log(`Using proxy: ${new URL(selectedProxy).hostname}`);
+        }
+        // --- End Proxy Rotation Logic ---
+
 
         let videoUrl, audioUrl, title, ext;
 
@@ -53,7 +64,7 @@ app.post('/api/download', async (req, res) => {
         console.log('Fetching media URLs with yt-dlp...');
         if (type === 'mp3') {
             const mp3Output = await ytdlp.exec(url, {
-                proxy,
+                proxy: selectedProxy,
                 getUrl: true,
                 format: 'bestaudio/best',
                 getTitle: true,
@@ -65,14 +76,14 @@ app.post('/api/download', async (req, res) => {
             audioUrl = lines.find(line => line.startsWith('http'));
         } else {
             // Get title
-            const titleOutput = await ytdlp.exec(url, { proxy, getTitle: true });
+            const titleOutput = await ytdlp.exec(url, { proxy: selectedProxy, getTitle: true });
             title = String(titleOutput).trim().replace(/[<>:"/\\|?*]/g, '_'); // Sanitize title for filename
             ext = 'mp4'; // We will enforce this
 
             // Get video URL
             console.log(`Fetching video URL for quality: ${quality}p`);
             const videoOutput = await ytdlp.exec(url, {
-                proxy,
+                proxy: selectedProxy,
                 getUrl: true,
                 format: `bestvideo[height<=${parseInt(quality)}]/bestvideo`,
             });
@@ -81,7 +92,7 @@ app.post('/api/download', async (req, res) => {
             // Get audio URL
             console.log('Fetching audio URL...');
             const audioOutput = await ytdlp.exec(url, {
-                proxy,
+                proxy: selectedProxy,
                 getUrl: true,
                 format: 'bestaudio/best',
             });
@@ -93,10 +104,17 @@ app.post('/api/download', async (req, res) => {
              throw new Error('Could not retrieve valid media URLs. The content might be private or region-locked.');
         }
 
-        // Step 2: Download files from URLs (without proxy)
+        // Step 2: Download files from URLs (through the same proxy)
+        const proxyAgent = selectedProxy ? new HttpsProxyAgent(selectedProxy) : null;
+        const axiosConfig = {
+            method: 'get',
+            responseType: 'stream',
+            httpsAgent: proxyAgent,
+        };
+
         const audioPath = path.join(requestDir, `audio_source`);
-        console.log('Downloading audio stream...');
-        const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
+        console.log('Downloading audio stream through proxy...');
+        const audioStream = await axios({ ...axiosConfig, url: audioUrl });
         const audioWriter = fs.createWriteStream(audioPath);
         audioStream.data.pipe(audioWriter);
         await new Promise((resolve, reject) => {
@@ -123,8 +141,8 @@ app.post('/api/download', async (req, res) => {
             console.log('MP3 conversion complete.');
         } else {
             const videoPath = path.join(requestDir, `video_source`);
-            console.log('Downloading video stream...');
-            const videoStream = await axios({ method: 'get', url: videoUrl, responseType: 'stream' });
+            console.log('Downloading video stream through proxy...');
+            const videoStream = await axios({ ...axiosConfig, url: videoUrl });
             const videoWriter = fs.createWriteStream(videoPath);
             videoStream.data.pipe(videoWriter);
             await new Promise((resolve, reject) => {

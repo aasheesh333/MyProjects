@@ -8,29 +8,41 @@ To avoid being blocked by services like YouTube, this application is designed to
 2.  Navigate to the section for your proxy service (e.g., "Residential Proxies").
 3.  Find your proxy **username**, **password**, **host**, and **port**.
 
-## Step 2: Format the Proxy URL
+## Step 2: Format the Proxy URL(s)
 
-Your proxy URL must be in the following format:
+You can add one or more proxy URLs.
 
+### Single Proxy
+
+If you are using only one proxy, the format is:
 ```
 http://USERNAME:PASSWORD@HOST:PORT
 ```
 
 **Example:**
-
-If your credentials are:
--   **Username:** `dataimpulse_user`
--   **Password:** `secret123`
--   **Host:** `proxy.dataimpulse.com`
--   **Port:** `8200`
-
-Your final proxy URL will be:
-
 ```
 http://dataimpulse_user:secret123@proxy.dataimpulse.com:8200
 ```
 
-## Step 3: Add the Proxy URL to Your Project
+### Multiple Proxies (Proxy Rotation)
+
+To use multiple proxies, provide them in a single line, separated by commas (`,`). The application will randomly pick one proxy for each download request.
+
+**This is the recommended way to save your residential proxy bandwidth.**
+
+**Example:**
+
+Let's say you have your main residential proxy and two datacenter proxies:
+1.  `http://dataimpulse_user:secret123@proxy.dataimpulse.com:8200`
+2.  `http://datacenter_proxy_1.com:8080`
+3.  `http://user2:pass2@datacenter_proxy_2.com:9999`
+
+You would combine them into a single line in your `.env` file like this:
+```
+http://dataimpulse_user:secret123@proxy.dataimpulse.com:8200,http://datacenter_proxy_1.com:8080,http://user2:pass2@datacenter_proxy_2.com:9999
+```
+
+## Step 3: Add the Proxy URL(s) to Your Project
 
 You need to set this URL as an environment variable named `PROXY_URL`.
 
