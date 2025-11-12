@@ -8,7 +8,6 @@ const axios = require('axios');
 const { exec } = require('child_process');
 const ffmpeg = require('ffmpeg-static');
 
-
 const app = express();
 const PORT = process.env.PORT || 5001;
 
@@ -56,7 +55,7 @@ app.post('/api/download', async (req, res) => {
             const mp3Output = await ytdlp.exec(url, {
                 proxy,
                 getUrl: true,
-                format: 'bestaudio',
+                format: 'bestaudio/best',
                 getTitle: true,
                 output: '%(title)s.%(ext)s'
             });
@@ -75,7 +74,7 @@ app.post('/api/download', async (req, res) => {
             const videoOutput = await ytdlp.exec(url, {
                 proxy,
                 getUrl: true,
-                format: `bestvideo[height<=${parseInt(quality)}][ext=mp4]/bestvideo[ext=mp4]`,
+                format: `bestvideo[height<=${parseInt(quality)}]/bestvideo`,
             });
             videoUrl = String(videoOutput).trim().split('\n').find(line => line.startsWith('http'));
 
@@ -84,7 +83,7 @@ app.post('/api/download', async (req, res) => {
             const audioOutput = await ytdlp.exec(url, {
                 proxy,
                 getUrl: true,
-                format: 'bestaudio[ext=m4a]/bestaudio',
+                format: 'bestaudio/best',
             });
             audioUrl = String(audioOutput).trim().split('\n').find(line => line.startsWith('http'));
         }
