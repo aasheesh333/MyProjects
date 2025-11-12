@@ -1,9 +1,13 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const ytdlp = require('yt-dlp-exec');
-const puppeteer = require('puppeteer');
+const axios = require('axios');
+const { exec } = require('child_process');
+const ffmpeg = require('ffmpeg-static');
+
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -22,51 +26,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- YouTube Session Management (Direct Scraping) ---
-let youtubeSession = null;
-let lastSessionFetch = 0;
-const SESSION_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-async function getYouTubeSession() {
-    const now = Date.now();
-    if (youtubeSession && (now - lastSessionFetch < SESSION_CACHE_DURATION)) {
-        console.log('Using cached YouTube session.');
-        return youtubeSession;
-    }
-
-    console.log('Fetching new YouTube session tokens via Puppeteer...');
-    let browser = null;
-    try {
-        browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-        const page = await browser.newPage();
-        await page.goto('https://www.youtube.com', { waitUntil: 'networkidle2' });
-
-        // Wait for the specific object to be available on the page
-        await page.waitForFunction(() => window.ytInitialData && window.ytInitialData.visitorData);
-
-        const sessionData = await page.evaluate(() => {
-            const visitorData = window.ytInitialData?.visitorData?.visitorData;
-            const poToken = window.ytInitialData?.responseContext?.webResponseContextExtensionData?.ytConfigData?.body?.playerResponse?.args?.po_token;
-            return { visitorData, poToken };
-        });
-
-        if (!sessionData || !sessionData.visitorData || !sessionData.poToken) {
-            throw new Error('Failed to extract valid session tokens from YouTube page.');
-        }
-
-        youtubeSession = sessionData;
-        lastSessionFetch = now;
-        console.log('Successfully fetched new YouTube session tokens.');
-        return youtubeSession;
-    } catch (error) {
-        console.error('Fatal error fetching YouTube session with Puppeteer:', error);
-        throw new Error('Could not establish a valid session with YouTube.');
-    } finally {
-        if (browser) await browser.close();
-    }
-}
-
-
 // --- Universal Download Endpoint ---
 app.post('/api/download', async (req, res) => {
     const { url, quality, type } = req.body;
@@ -84,47 +43,136 @@ app.post('/api/download', async (req, res) => {
     };
 
     try {
-        const session = await getYouTubeSession();
-
-        const ytdlpArgs = {
-            output: path.join(requestDir, '%(title)s.%(ext)s'),
-            ffmpegLocation: require('ffmpeg-static'),
-            noCheckCertificate: true,
-            sleepInterval: 5,
-            extractorArgs: `youtube:player_client=web;player_client_version=1.2.3;po_token=${session.poToken};visitor_data=${session.visitorData}`,
-        };
-
-        if (type === 'mp3') {
-            ytdlpArgs.format = 'bestaudio';
-            ytdlpArgs.extractAudio = true;
-            ytdlpArgs.audioFormat = 'mp3';
-            ytdlpArgs.audioQuality = `${quality}K`;
-        } else {
-            ytdlpArgs.format = `bestvideo[height<=${parseInt(quality)}]+bestaudio/best`;
+        const proxy = process.env.PROXY_URL;
+        if (!proxy) {
+            console.warn('PROXY_URL environment variable not set. Downloads may be unreliable.');
         }
 
-        await ytdlp.exec(url, ytdlpArgs);
+        let videoUrl, audioUrl, title, ext;
 
-        const files = fs.readdirSync(requestDir);
-        if (files.length === 0) throw new Error('Download failed. yt-dlp did not produce a file.');
+        // Step 1: Get Video and Audio URLs using yt-dlp and proxy
+        console.log('Fetching media URLs with yt-dlp...');
+        if (type === 'mp3') {
+            const mp3Output = await ytdlp.exec(url, {
+                proxy,
+                getUrl: true,
+                format: 'bestaudio',
+                getTitle: true,
+                output: '%(title)s.%(ext)s'
+            });
+            const lines = mp3Output.trim().split('\n');
+            title = lines[0];
+            ext = 'mp3'; // We will enforce this
+            audioUrl = lines[lines.length - 1];
+        } else {
+            // Get title
+            const titleOutput = await ytdlp.exec(url, { proxy, getTitle: true });
+            title = titleOutput.trim().replace(/[<>:"/\\|?*]/g, '_'); // Sanitize title for filename
+            ext = 'mp4'; // We will enforce this
 
-        const downloadedFile = files[0];
-        const finalFilepath = path.join(requestDir, downloadedFile);
+            // Get video URL
+            console.log(`Fetching video URL for quality: ${quality}p`);
+            const videoOutput = await ytdlp.exec(url, {
+                proxy,
+                getUrl: true,
+                format: `bestvideo[height<=${parseInt(quality)}][ext=mp4]/bestvideo[ext=mp4]`,
+            });
+            videoUrl = videoOutput.trim().split('\n').pop();
 
-        res.download(finalFilepath, downloadedFile, (err) => {
+            // Get audio URL
+            console.log('Fetching audio URL...');
+            const audioOutput = await ytdlp.exec(url, {
+                proxy,
+                getUrl: true,
+                format: 'bestaudio[ext=m4a]/bestaudio',
+            });
+            audioUrl = audioOutput.trim().split('\n').pop();
+        }
+        console.log('Successfully fetched media URLs.');
+
+        if ((!videoUrl && type === 'mp4') || !audioUrl) {
+             throw new Error('Could not retrieve valid media URLs. The content might be private or region-locked.');
+        }
+
+        // Step 2: Download files from URLs (without proxy)
+        const audioPath = path.join(requestDir, `audio_source`);
+        console.log('Downloading audio stream...');
+        const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
+        const audioWriter = fs.createWriteStream(audioPath);
+        audioStream.data.pipe(audioWriter);
+        await new Promise((resolve, reject) => {
+            audioWriter.on('finish', resolve);
+            audioWriter.on('error', (err) => reject(new Error(`Failed to download audio file: ${err.message}`)));
+        });
+        console.log('Audio download complete.');
+
+        let finalFilepath;
+
+        if (type === 'mp3') {
+            finalFilepath = path.join(requestDir, `${title}.${ext}`);
+            console.log('Converting to MP3...');
+            await new Promise((resolve, reject) => {
+                const ffmpegCommand = `"${ffmpeg}" -i "${audioPath}" -q:a ${quality === '320' ? 0 : 2} "${finalFilepath}"`;
+                exec(ffmpegCommand, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error('FFMPEG MP3 Stderr:', stderr);
+                        return reject(new Error(`FFmpeg error (MP3 conversion): ${stderr}`));
+                    }
+                    resolve();
+                });
+            });
+            console.log('MP3 conversion complete.');
+        } else {
+            const videoPath = path.join(requestDir, `video_source`);
+            console.log('Downloading video stream...');
+            const videoStream = await axios({ method: 'get', url: videoUrl, responseType: 'stream' });
+            const videoWriter = fs.createWriteStream(videoPath);
+            videoStream.data.pipe(videoWriter);
+            await new Promise((resolve, reject) => {
+                videoWriter.on('finish', resolve);
+                videoWriter.on('error', (err) => reject(new Error(`Failed to download video file: ${err.message}`)));
+            });
+            console.log('Video download complete.');
+
+            // Step 3: Merge files with ffmpeg
+            finalFilepath = path.join(requestDir, `${title}.${ext}`);
+            console.log('Merging video and audio with ffmpeg...');
+            await new Promise((resolve, reject) => {
+                const ffmpegCommand = `"${ffmpeg}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac "${finalFilepath}"`;
+                exec(ffmpegCommand, (error, stdout, stderr) => {
+                     if (error) {
+                        console.error('FFMPEG Merge Stderr:', stderr);
+                        return reject(new Error(`FFmpeg error (merge): ${stderr}`));
+                    }
+                     resolve();
+                });
+            });
+            console.log('Merge complete.');
+        }
+
+        // Step 4: Send the file to the user
+        console.log(`Sending final file: ${finalFilepath}`);
+        res.download(finalFilepath, path.basename(finalFilepath), (err) => {
             if (err) console.error('Error sending file to user:', err);
             cleanup();
         });
 
     } catch (error) {
-        console.error('Processing error:', error);
+        console.error('Processing error:', error.message);
+        console.error('yt-dlp stderr:', error.stderr);
         cleanup();
-        res.status(500).json({ error: error.message || 'An unexpected error occurred.' });
+
+        const errString = error.stderr || error.toString();
+        if (errString.includes('429')) {
+             res.status(429).json({ error: 'Our server is being rate-limited by the content provider. Please try again later.' });
+        } else {
+             res.status(500).json({ error: error.message || 'An unexpected error occurred processing your request.' });
+        }
     }
 });
+
 
 // --- Server Startup ---
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    getYouTubeSession();
 });

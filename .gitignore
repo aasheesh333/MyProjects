@@ -7,5 +7,8 @@ npm-debug.log
 __pycache__/
 *.pyc
 
+# Environment variables
+.env
+
 # Log files
 server.log
