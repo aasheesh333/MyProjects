@@ -8,6 +8,7 @@ try {
     const { exec } = require('child_process');
     const ffmpeg = require('ffmpeg-static');
     const axios = require('axios');
+    const archiver = require('archiver'); // For creating ZIP files
 
     const app = express();
     const PORT = process.env.PORT || 5002;
@@ -49,9 +50,11 @@ try {
 
         try {
             jobStatus[task.jobId] = { status: 'processing' };
-            const result = await processDownload(task.url, task.quality, task.type);
+            // Pass the entire task object to processDownload
+            const result = await processDownload(task);
             jobStatus[task.jobId] = { status: 'completed', url: result.url };
         } catch (error) {
+            console.error(`[Job ${task.jobId}] Processing failed:`, error.message);
             jobStatus[task.jobId] = { status: 'failed', error: 'Processing failed.' };
         } finally {
             activeJobs--;
@@ -75,8 +78,8 @@ try {
         }
     }, 5 * 60 * 1000); // Check every 5 minutes
 
-    // --- Processing Logic (Your full logic from before) ---
-    async function processDownload(url, quality, type) {
+    // --- NEW: Multi-Platform Processing Logic ---
+    async function processDownload({ url, quality, type, platform }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
             console.log(`[Cache HIT] Returning cached file for: ${url}`);
@@ -89,73 +92,86 @@ try {
         fs.mkdirSync(requestDir);
         const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
 
+        const commonYtdlpOptions = {
+            noCheckCertificate: true,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            referer: 'https://www.google.com/',
+        };
+
         try {
-            let videoUrl, audioUrl, title, ext;
-            const commonYtdlpOptions = {
-                noCheckCertificate: true,
-                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                referer: 'https://www.google.com/',
-            };
+            // Step 1: Get metadata to determine content type (single video, gallery, etc.)
+            const metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
+            const title = (metadata.title || `download_${uuidv4()}`).replace(/[<>:"/\\|?*]/g, '_');
 
-            if (type === 'mp3') {
-                const output = await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best', getTitle: true });
-                const lines = String(output).trim().split('\n');
-                title = lines[0].replace(/[<>:"/\\|?*]/g, '_');
-                ext = 'mp3';
-                audioUrl = lines.find(line => line.startsWith('http'));
-            } else {
-                const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
-                title = String(titleOutput).trim().replace(/[<>:"/\\|?*]/g, '_');
-                ext = 'mp4';
+            // --- Gallery/Playlist Logic (e.g., Instagram multiple images) ---
+            if (metadata.entries && (type === 'image' || type === 'mp4')) {
+                console.log(`[Processing] Detected gallery with ${metadata.entries.length} items.`);
+                const zipFileName = `${title}.zip`;
+                const zipFilePath = path.join(DOWNLOAD_DIR, zipFileName);
+                const output = fs.createWriteStream(zipFilePath);
+                const archive = archiver('zip', { zlib: { level: 9 } });
 
-                const videoOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: `bestvideo[height<=${parseInt(quality)}]/bestvideo` });
-                videoUrl = String(videoOutput).trim().split('\n').find(line => line.startsWith('http'));
+                archive.pipe(output);
 
-                const audioOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best' });
-                audioUrl = String(audioOutput).trim().split('\n').find(line => line.startsWith('http'));
+                for (let i = 0; i < metadata.entries.length; i++) {
+                    const entry = metadata.entries[i];
+                    const mediaUrl = entry.url;
+                    if (!mediaUrl) continue;
+
+                    const fileResponse = await axios({ url: mediaUrl, responseType: 'stream' });
+                    // Determine extension from URL or use a default
+                    const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
+                    archive.append(fileResponse.data, { name: `${title}_${i + 1}${extension}` });
+                }
+
+                await archive.finalize();
+
+                cache[cacheKey] = { filename: zipFileName, timestamp: Date.now() };
+                cleanup();
+                const fullUrl = `${BASE_URL}/downloads/${zipFileName}`;
+                return { url: fullUrl };
             }
 
-            if ((!videoUrl && type === 'mp4') || !audioUrl) {
-                throw new Error('Could not retrieve valid media URLs.');
-            }
-
-            const audioPath = path.join(requestDir, `audio_source`);
-            const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
-            const audioWriter = fs.createWriteStream(audioPath);
-            audioStream.data.pipe(audioWriter);
-            await new Promise((resolve, reject) => {
-                audioWriter.on('finish', resolve);
-                audioWriter.on('error', reject);
-            });
-
-            let finalFilename = `${title}.${ext}`;
-            const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+            // --- Single Video/Audio Logic ---
+            let finalFilename;
+            const finalFilepath = path.join(DOWNLOAD_DIR, `${title}.${type === 'mp3' ? 'mp3' : 'mp4'}`);
 
             if (type === 'mp3') {
+                const audioUrl = metadata.url || (await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best' })).stdout.trim().split('\n')[0];
+                if (!audioUrl) throw new Error('Could not retrieve valid audio URL.');
+
+                const audioPath = path.join(requestDir, `audio_source`);
+                const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
+                const audioWriter = fs.createWriteStream(audioPath);
+                audioStream.data.pipe(audioWriter);
+                await new Promise((resolve, reject) => {
+                    audioWriter.on('finish', resolve); audioWriter.on('error', reject);
+                });
+
                 await new Promise((resolve, reject) => {
                     const command = `"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`;
                     exec(command, (err) => err ? reject(err) : resolve());
                 });
-            } else {
-                const videoPath = path.join(requestDir, `video_source`);
-                const videoStream = await axios({ method: 'get', url: videoUrl, responseType: 'stream' });
-                const videoWriter = fs.createWriteStream(videoPath);
-                videoStream.data.pipe(videoWriter);
-                await new Promise((resolve, reject) => {
-                    videoWriter.on('finish', resolve);
-                    videoWriter.on('error', reject);
-                });
+                finalFilename = `${title}.mp3`;
 
-                await new Promise((resolve, reject) => {
-                    const command = `"${ffmpeg}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac "${finalFilepath}"`;
-                    exec(command, (err) => err ? reject(err) : resolve());
+            } else { // MP4 logic
+                const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
+                // We will use yt-dlp to download and merge directly
+                await ytdlp.exec(url, {
+                    ...commonYtdlpOptions,
+                    format: formatSelector,
+                    output: finalFilepath,
+                    // Recode to ensure compatibility if direct copy isn't mp4
+                    recodeVideo: 'mp4'
                 });
+                finalFilename = `${title}.mp4`;
             }
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
             cleanup();
             const fullUrl = `${BASE_URL}/downloads/${finalFilename}`;
             return { url: fullUrl };
+
         } catch (error) {
             cleanup();
             console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
@@ -163,13 +179,12 @@ try {
         }
     }
 
-
     // --- API Endpoints ---
     app.post('/start-download', apiKeyMiddleware, (req, res) => {
-        const { url, quality, type } = req.body;
-        if (!url || !quality || !type) return res.status(400).json({ error: 'Missing parameters' });
+        // Add platform to the request body
+        const { url, quality, type, platform } = req.body;
+        if (!url || !quality || !type || !platform) return res.status(400).json({ error: 'Missing parameters' });
 
-        // Check cache before queueing
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
             const fullUrl = `${BASE_URL}/downloads/${cache[cacheKey].filename}`;
@@ -179,8 +194,9 @@ try {
         const jobId = uuidv4();
         jobStatus[jobId] = { status: 'queued' };
 
-        jobQueue.push({ jobId, url, quality, type });
-        processQueue(); // Start processing if not already active
+        // Pass the whole object to the queue
+        jobQueue.push({ jobId, url, quality, type, platform });
+        processQueue();
 
         res.json({ jobId });
     });
