@@ -9,6 +9,16 @@ __pycache__/
 
 # Environment variables
 .env
+vps_backend/.env
+
+# Node.js dependencies
+node_modules/
+vps_backend/node_modules/
 
 # Log files
 server.log
+vps_backend/*.log
+
+# Download cache
+vps_backend/public_downloads/
+vps_backend/temp_processing/

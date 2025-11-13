@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const platformIcons = document.querySelectorAll('.platform-icon');
     const typeSelect = document.getElementById('type-select');
     const qualitySelect = document.getElementById('quality-select');
     const qualityOptions = qualitySelect.querySelectorAll('option');
@@ -9,21 +8,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadStartedSection = document.getElementById('download-started-section');
     const convertNextBtn = document.getElementById('convert-next-btn');
 
-    // Add a new element for conversion progress messages
-    const processingMessage = document.createElement('p');
-    processingMessage.id = 'processing-message';
-    processingMessage.style.display = 'none';
-    convertBtn.parentNode.insertBefore(processingMessage, convertBtn.nextSibling);
+    // --- New Progress Bar Elements ---
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'progress-container';
+    progressContainer.style.display = 'none';
 
-    let selectedPlatform = 'youtube';
+    const progressStatus = document.createElement('p');
+    progressStatus.id = 'progress-status';
+
+    const progressBar = document.createElement('div');
+    progressBar.className = 'progress-bar';
+    const progressBarInner = document.createElement('div');
+    progressBarInner.className = 'progress-bar-inner';
+    progressBar.appendChild(progressBarInner);
+
+    progressContainer.appendChild(progressStatus);
+    progressContainer.appendChild(progressBar);
+    downloaderSection.appendChild(progressContainer);
+    // --- End New Elements ---
+
+    let pollInterval;
 
     function updateQualityDropdown() {
         const selectedType = typeSelect.value;
         qualityOptions.forEach(option => {
             option.style.display = option.dataset.type === selectedType ? 'block' : 'none';
         });
-
-        // Explicitly set the default quality for the selected type
         if (selectedType === 'mp4') {
             qualitySelect.value = '720';
         } else if (selectedType === 'mp3') {
@@ -33,28 +43,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     typeSelect.addEventListener('change', updateQualityDropdown);
 
-    function handlePlatformSelection(platform) {
-        selectedPlatform = platform;
-        platformIcons.forEach(icon => {
-            icon.classList.remove('active');
-            if (icon.dataset.platform === platform) icon.classList.add('active');
-        });
+    async function pollStatus(jobId) {
+        pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/status/${jobId}`);
+                if (!response.ok) {
+                    throw new Error('Could not get job status.');
+                }
+                const data = await response.json();
 
-        // This logic is for YouTube, other platforms can be handled here
-        if (platform === 'youtube') {
-            document.getElementById('quality-group').style.display = 'flex';
-            updateQualityDropdown();
-        } else {
-            // For simplicity, hide quality selection for other platforms
-            document.getElementById('quality-group').style.display = 'none';
-        }
+                progressStatus.textContent = `Status: ${data.status}`;
+                if (data.status === 'queued') {
+                    progressBarInner.style.width = '25%';
+                } else if (data.status === 'processing') {
+                    progressBarInner.style.width = '60%';
+                } else if (data.status === 'completed') {
+                    clearInterval(pollInterval);
+                    progressBarInner.style.width = '100%';
+                    progressStatus.textContent = 'Download Ready!';
+                    window.location.href = data.url; // Start download immediately
+
+                    // Show the 'Convert Next' screen after a short delay
+                    setTimeout(() => {
+                        downloaderSection.style.display = 'none';
+                        downloadStartedSection.style.display = 'block';
+                    }, 1000);
+
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    alert(`Error: ${data.error}`);
+                    resetUI();
+                }
+            } catch (error) {
+                clearInterval(pollInterval);
+                alert(`Error: ${error.message}`);
+                resetUI();
+            }
+        }, 2000); // Poll every 2 seconds
     }
-
-    platformIcons.forEach(icon => {
-        icon.addEventListener('click', () => {
-            handlePlatformSelection(icon.dataset.platform);
-        });
-    });
 
     convertBtn.addEventListener('click', async () => {
         const url = urlInput.value.trim();
@@ -63,11 +89,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const originalBtnText = convertBtn.textContent;
-        convertBtn.textContent = 'Processing...';
-        convertBtn.disabled = true;
-        processingMessage.textContent = 'Your download will begin shortly. High-quality conversions may take several minutes...';
-        processingMessage.style.display = 'block';
+        convertBtn.style.display = 'none';
+        progressContainer.style.display = 'block';
+        progressStatus.textContent = 'Status: sending request...';
+        progressBarInner.style.width = '5%';
+
 
         try {
             const quality = qualitySelect.value;
@@ -80,37 +106,29 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                 const errData = await response.json();
+                const errData = await response.json();
                 throw new Error(errData.error || 'A server error occurred.');
             }
 
-            const blob = await response.blob();
-            const header = response.headers.get('Content-Disposition');
-            const parts = header.split(';');
-            let filename = 'download';
-            parts.forEach(part => {
-                if (part.trim().startsWith('filename=')) {
-                    filename = part.split('=')[1].replace(/"/g, '');
-                }
-            });
+            const data = await response.json();
 
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = decodeURIComponent(filename);
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(a.href);
-
-            downloaderSection.style.display = 'none';
-            downloadStartedSection.style.display = 'block';
+            if (data.jobId) {
+                // It's a queued job, start polling
+                pollStatus(data.jobId);
+            } else if (data.status === 'completed' && data.url) {
+                // It was a cached result, download immediately
+                progressStatus.textContent = 'Status: completed (from cache)';
+                progressBarInner.style.width = '100%';
+                window.location.href = data.url;
+                setTimeout(() => {
+                    downloaderSection.style.display = 'none';
+                    downloadStartedSection.style.display = 'block';
+                }, 1000);
+            }
 
         } catch (error) {
             alert(`Error: ${error.message}`);
-        } finally {
-            convertBtn.textContent = originalBtnText;
-            convertBtn.disabled = false;
-            processingMessage.style.display = 'none';
+            resetUI();
         }
     });
 
@@ -118,21 +136,21 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.value = '';
         downloaderSection.style.display = 'block';
         downloadStartedSection.style.display = 'none';
-        handlePlatformSelection('youtube');
+
+        convertBtn.style.display = 'block';
+        progressContainer.style.display = 'none';
+        progressBarInner.style.width = '0%';
+        if(pollInterval) clearInterval(pollInterval);
+
+        initializeDefaults();
     }
 
     convertNextBtn.addEventListener('click', resetUI);
 
-    // --- Initial Setup ---
     function initializeDefaults() {
         typeSelect.value = 'mp3';
-        qualitySelect.value = '128'; // Default MP3 quality
         updateQualityDropdown();
     }
 
-    // Set initial state when the page loads
     initializeDefaults();
-
-    // Also reset to defaults when 'youtube' is selected (or page is reset)
-    handlePlatformSelection(selectedPlatform);
 });

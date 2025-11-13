@@ -1,22 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-const ytdlp = require('yt-dlp-exec');
-const axios = require('axios');
-const { exec } = require('child_process');
-const ffmpeg = require('ffmpeg-static');
-const { HttpsProxyAgent } = require('https-proxy-agent');
+const axios = require('axios'); // We need axios here now
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-
-// --- Setup Temporary Directory ---
-const TEMP_DIR = path.join(__dirname, 'temp_downloads');
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR);
-}
+const BACKEND_URL = process.env.BACKEND_URL;
+const API_KEY = process.env.API_KEY;
 
 app.use(express.json());
 app.use(express.static(__dirname));
@@ -26,179 +16,50 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Universal Download Endpoint ---
+// --- API Proxy Endpoint ---
+// The frontend will call this, and this server will securely call the backend
 app.post('/api/download', async (req, res) => {
-    const { url, quality, type } = req.body;
-    if (!url || !quality || !type) {
-        return res.status(400).json({ error: 'URL, quality, and type are required' });
+    if (!BACKEND_URL || !API_KEY) {
+        return res.status(500).json({ error: 'Backend service is not configured.' });
     }
 
-    const requestDir = path.join(TEMP_DIR, uuidv4());
-    fs.mkdirSync(requestDir);
+    try {
+        // Forward the request to the real backend
+        const backendResponse = await axios.post(`${BACKEND_URL}/start-download`, req.body, {
+            headers: {
+                'x-api-key': API_KEY
+            }
+        });
+        res.json(backendResponse.data);
+    } catch (error) {
+        const status = error.response ? error.response.status : 500;
+        const data = error.response ? error.response.data : { error: 'An internal error occurred.' };
+        res.status(status).json(data);
+    }
+});
 
-    const cleanup = () => {
-        if (fs.existsSync(requestDir)) {
-            fs.rm(requestDir, { recursive: true, force: true }, () => {});
-        }
-    };
+app.get('/api/status/:jobId', async (req, res) => {
+    if (!BACKEND_URL || !API_KEY) {
+        return res.status(500).json({ error: 'Backend service is not configured.' });
+    }
 
     try {
-        // --- Proxy Rotation Logic ---
-        const proxyString = process.env.PROXY_URL;
-        if (!proxyString) {
-            console.warn('PROXY_URL environment variable not set. Downloads may be unreliable.');
-        }
-
-        const proxies = proxyString ? proxyString.split(',') : [];
-        const selectedProxy = proxies.length > 0 ? proxies[Math.floor(Math.random() * proxies.length)] : null;
-
-        if (selectedProxy) {
-            console.log(`Using proxy: ${new URL(selectedProxy).hostname}`);
-        }
-        // --- End Proxy Rotation Logic ---
-
-        // --- Common yt-dlp Options ---
-        const commonYtdlpOptions = {
-            proxy: selectedProxy,
-            noCheckCertificate: true,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            referer: 'https://www.google.com/',
-        };
-
-        let videoUrl, audioUrl, title, ext;
-
-        // Step 1: Get Video and Audio URLs using yt-dlp and proxy
-        console.log('Fetching media URLs with yt-dlp...');
-        if (type === 'mp3') {
-            const mp3Output = await ytdlp.exec(url, {
-                ...commonYtdlpOptions,
-                getUrl: true,
-                format: 'bestaudio/best',
-                getTitle: true,
-                output: '%(title)s.%(ext)s'
-            });
-            const lines = String(mp3Output).trim().split('\n');
-            title = lines[0];
-            ext = 'mp3'; // We will enforce this
-            audioUrl = lines.find(line => line.startsWith('http'));
-        } else {
-            // Get title
-            const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
-            title = String(titleOutput).trim().replace(/[<>:"/\\|?*]/g, '_'); // Sanitize title for filename
-            ext = 'mp4'; // We will enforce this
-
-            // Get video URL
-            console.log(`Fetching video URL for quality: ${quality}p`);
-            const videoOutput = await ytdlp.exec(url, {
-                ...commonYtdlpOptions,
-                getUrl: true,
-                format: `bestvideo[height<=${parseInt(quality)}]/bestvideo`,
-            });
-            videoUrl = String(videoOutput).trim().split('\n').find(line => line.startsWith('http'));
-
-            // Get audio URL
-            console.log('Fetching audio URL...');
-            const audioOutput = await ytdlp.exec(url, {
-                ...commonYtdlpOptions,
-                getUrl: true,
-                format: 'bestaudio/best',
-            });
-            audioUrl = String(audioOutput).trim().split('\n').find(line => line.startsWith('http'));
-        }
-        console.log('Successfully fetched media URLs.');
-
-        if ((!videoUrl && type === 'mp4') || !audioUrl) {
-             throw new Error('Could not retrieve valid media URLs. The content might be private or region-locked.');
-        }
-
-        // Step 2: Download files from URLs (through the same proxy)
-        const proxyAgent = selectedProxy ? new HttpsProxyAgent(selectedProxy) : null;
-        const axiosConfig = {
-            method: 'get',
-            responseType: 'stream',
-            httpsAgent: proxyAgent,
-        };
-
-        const audioPath = path.join(requestDir, `audio_source`);
-        console.log('Downloading audio stream through proxy...');
-        const audioStream = await axios({ ...axiosConfig, url: audioUrl });
-        const audioWriter = fs.createWriteStream(audioPath);
-        audioStream.data.pipe(audioWriter);
-        await new Promise((resolve, reject) => {
-            audioWriter.on('finish', resolve);
-            audioWriter.on('error', (err) => reject(new Error(`Failed to download audio file: ${err.message}`)));
+        const { jobId } = req.params;
+        const backendResponse = await axios.get(`${BACKEND_URL}/status/${jobId}`, {
+            headers: {
+                'x-api-key': API_KEY
+            }
         });
-        console.log('Audio download complete.');
-
-        let finalFilepath;
-
-        if (type === 'mp3') {
-            finalFilepath = path.join(requestDir, `${title}.${ext}`);
-            console.log(`Converting to MP3 at ${quality}kbps...`);
-            await new Promise((resolve, reject) => {
-                const ffmpegCommand = `"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`;
-                exec(ffmpegCommand, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error('FFMPEG MP3 Stderr:', stderr);
-                        return reject(new Error(`FFmpeg error (MP3 conversion): ${stderr}`));
-                    }
-                    resolve();
-                });
-            });
-            console.log('MP3 conversion complete.');
-        } else {
-            const videoPath = path.join(requestDir, `video_source`);
-            console.log('Downloading video stream through proxy...');
-            const videoStream = await axios({ ...axiosConfig, url: videoUrl });
-            const videoWriter = fs.createWriteStream(videoPath);
-            videoStream.data.pipe(videoWriter);
-            await new Promise((resolve, reject) => {
-                videoWriter.on('finish', resolve);
-                videoWriter.on('error', (err) => reject(new Error(`Failed to download video file: ${err.message}`)));
-            });
-            console.log('Video download complete.');
-
-            // Step 3: Merge files with ffmpeg
-            finalFilepath = path.join(requestDir, `${title}.${ext}`);
-            console.log('Merging video and audio with ffmpeg...');
-            await new Promise((resolve, reject) => {
-                const ffmpegCommand = `"${ffmpeg}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac "${finalFilepath}"`;
-                exec(ffmpegCommand, (error, stdout, stderr) => {
-                     if (error) {
-                        console.error('FFMPEG Merge Stderr:', stderr);
-                        return reject(new Error(`FFmpeg error (merge): ${stderr}`));
-                    }
-                     resolve();
-                });
-            });
-            console.log('Merge complete.');
-        }
-
-        // Step 4: Send the file to the user
-        console.log(`Sending final file: ${finalFilepath}`);
-        res.download(finalFilepath, path.basename(finalFilepath), (err) => {
-            if (err) console.error('Error sending file to user:', err);
-            cleanup();
-        });
-
+        res.json(backendResponse.data);
     } catch (error) {
-        console.error('--- Full Error Object ---');
-        console.error(JSON.stringify(error, null, 2));
-        console.error('--- End Full Error Object ---');
-
-        cleanup();
-
-        const errString = (error.stderr || error.message || '').toString();
-        if (errString.includes('429')) {
-             res.status(429).json({ error: 'Our server is being rate-limited by the content provider. Please try again later.' });
-        } else {
-             res.status(500).json({ error: error.message || 'An unexpected error occurred processing your request.' });
-        }
+        const status = error.response ? error.response.status : 500;
+        const data = error.response ? error.response.data : { error: 'An internal error occurred.' };
+        res.status(status).json(data);
     }
 });
 
 
 // --- Server Startup ---
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Frontend Server is running on http://localhost:${PORT}`);
 });
