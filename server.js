@@ -57,6 +57,13 @@ app.post('/api/download', async (req, res) => {
         }
         // --- End Proxy Rotation Logic ---
 
+        // --- Common yt-dlp Options ---
+        const commonYtdlpOptions = {
+            proxy: selectedProxy,
+            noCheckCertificate: true,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            referer: 'https://www.google.com/',
+        };
 
         let videoUrl, audioUrl, title, ext;
 
@@ -64,7 +71,7 @@ app.post('/api/download', async (req, res) => {
         console.log('Fetching media URLs with yt-dlp...');
         if (type === 'mp3') {
             const mp3Output = await ytdlp.exec(url, {
-                proxy: selectedProxy,
+                ...commonYtdlpOptions,
                 getUrl: true,
                 format: 'bestaudio/best',
                 getTitle: true,
@@ -76,14 +83,14 @@ app.post('/api/download', async (req, res) => {
             audioUrl = lines.find(line => line.startsWith('http'));
         } else {
             // Get title
-            const titleOutput = await ytdlp.exec(url, { proxy: selectedProxy, getTitle: true });
+            const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
             title = String(titleOutput).trim().replace(/[<>:"/\\|?*]/g, '_'); // Sanitize title for filename
             ext = 'mp4'; // We will enforce this
 
             // Get video URL
             console.log(`Fetching video URL for quality: ${quality}p`);
             const videoOutput = await ytdlp.exec(url, {
-                proxy: selectedProxy,
+                ...commonYtdlpOptions,
                 getUrl: true,
                 format: `bestvideo[height<=${parseInt(quality)}]/bestvideo`,
             });
@@ -92,7 +99,7 @@ app.post('/api/download', async (req, res) => {
             // Get audio URL
             console.log('Fetching audio URL...');
             const audioOutput = await ytdlp.exec(url, {
-                proxy: selectedProxy,
+                ...commonYtdlpOptions,
                 getUrl: true,
                 format: 'bestaudio/best',
             });
@@ -175,11 +182,13 @@ app.post('/api/download', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Processing error:', error.message);
-        console.error('yt-dlp stderr:', error.stderr);
+        console.error('--- Full Error Object ---');
+        console.error(JSON.stringify(error, null, 2));
+        console.error('--- End Full Error Object ---');
+
         cleanup();
 
-        const errString = error.stderr || error.toString();
+        const errString = (error.stderr || error.message || '').toString();
         if (errString.includes('429')) {
              res.status(429).json({ error: 'Our server is being rate-limited by the content provider. Please try again later.' });
         } else {
