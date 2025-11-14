@@ -118,10 +118,42 @@ try {
             referer: 'https://www.google.com/',
         };
 
+        let metadata;
         try {
-            const metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
-            const rawTitle = metadata.title;
+            // Attempt to get full JSON metadata first. This is best for videos and galleries.
+            metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
+        } catch (error) {
+            const stderr = error.stderr || '';
+            const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
 
+            // If the user wants an image and the error is "no video", it's not a real error.
+            // We fall back to fetching just the thumbnail and title.
+            if (type === 'image' && isNoVideoError) {
+                console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
+                try {
+                    const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
+                    const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
+
+                    metadata = {
+                        title: titleOutput.stdout.trim(),
+                        thumbnail: thumbnailOutput.stdout.trim(),
+                    };
+                } catch (fallbackError) {
+                    cleanup();
+                    console.error(`[Image Fallback] FAILED for ${url}:`, JSON.stringify(fallbackError, null, 2));
+                    throw fallbackError;
+                }
+            } else {
+                // This is a genuine error, so we should fail the job.
+                cleanup();
+                console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
+                throw error;
+            }
+        }
+
+        // By this point, `metadata` should be populated, either from the main try or the fallback catch.
+        try {
+            const rawTitle = metadata.title;
             let finalFilename;
 
             // --- Gallery/Playlist Logic ---
@@ -189,7 +221,8 @@ try {
 
         } catch (error) {
             cleanup();
-            console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
+            // This second catch block handles errors *after* getting metadata (e.g., download failed)
+            console.error(`Post-metadata processing failed for ${url}:`, JSON.stringify(error, null, 2));
             throw error;
         }
     }

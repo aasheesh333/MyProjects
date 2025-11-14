@@ -389,3 +389,46 @@ footer {
     color: #6c757d;
     margin-top: 1.5rem;
 }
+
+.platform-selector-container {
+    position: relative;
+    overflow-x: auto;
+    white-space: nowrap;
+    margin-bottom: 2.5rem;
+    padding: 0 40px; /* Add space for the buttons */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scroller-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    cursor: pointer;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #495057;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.2s ease-in-out;
+}
+
+.scroller-btn:hover {
+    background-color: #f1f3f5;
+    transform: translateY(-50%) scale(1.05);
+}
+
+.scroller-btn.left {
+    left: 0;
+}
+
+.scroller-btn.right {
+    right: 0;
+}

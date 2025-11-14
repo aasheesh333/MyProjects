@@ -1,6 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const platformSlider = document.querySelector('.platform-slider');
+    const platformContainer = document.querySelector('.platform-selector-container');
+    const scrollLeftBtn = document.getElementById('scroll-left-btn');
+    const scrollRightBtn = document.getElementById('scroll-right-btn');
     const typeSelect = document.getElementById('type-select');
     const qualityGroup = document.getElementById('quality-group');
     const qualitySelect = document.getElementById('quality-select');
@@ -15,15 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Platform Configuration ---
     const platformConfig = {
         'youtube':     { types: ['mp3', 'mp4'], quality: true, premium: false },
-        'instagram':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'facebook':    { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'instagram':   { types: ['mp4', 'image'], quality: false, premium: false },
+        'facebook':    { types: ['mp4', 'image'], quality: false, premium: false },
         'tiktok':      { types: ['mp3', 'mp4'], quality: false, premium: false },
         'snapchat':    { types: ['mp4'], quality: false, premium: false },
         'dailymotion': { types: ['mp3', 'mp4'], quality: true, premium: false },
-        'x-twitter':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'linkedin':    { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'reddit':      { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'pinterest':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'x-twitter':   { types: ['mp4', 'image'], quality: false, premium: false },
+        'linkedin':    { types: ['mp4', 'image'], quality: false, premium: false },
+        'reddit':      { types: ['mp4', 'image'], quality: false, premium: false },
+        'pinterest':   { types: ['image'], quality: false, premium: false },
         'threads':     { types: ['mp4', 'image'], quality: false, premium: true },
         'shutterstock': { types: ['image', 'mp4'], quality: false, premium: true },
         'viddyoze':    { types: ['mp4'], quality: false, premium: true },
@@ -78,20 +81,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners & Download Logic ---
 
-    // NEW: Function to force a download
+    // NEW: Function to force a download - Updated for Mobile Compatibility
     function forceDownload(url) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = ''; // The 'download' attribute forces download. Filename is set by server.
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // This iframe technique is more reliable for triggering downloads
+        // on mobile browsers without navigating away from the page.
+        const oldIframe = document.getElementById('download_iframe');
+        if (oldIframe) {
+            oldIframe.remove();
+        }
+
+        const iframe = document.createElement('iframe');
+        iframe.id = 'download_iframe';
+        iframe.src = url;
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
     }
 
     platformSlider.addEventListener('click', (e) => {
         if (e.target.classList.contains('platform-icon')) {
             updateUIForPlatform(e.target.dataset.platform);
         }
+    });
+
+    scrollLeftBtn.addEventListener('click', () => {
+        platformContainer.scrollBy({ left: -200, behavior: 'smooth' });
+    });
+
+    scrollRightBtn.addEventListener('click', () => {
+        platformContainer.scrollBy({ left: 200, behavior: 'smooth' });
     });
 
     typeSelect.addEventListener('change', updateQualityOptions);
