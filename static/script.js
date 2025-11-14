@@ -76,7 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Event Listeners ---
+    // --- Event Listeners & Download Logic ---
+
+    // NEW: Function to force a download
+    function forceDownload(url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = ''; // The 'download' attribute forces download. Filename is set by server.
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
     platformSlider.addEventListener('click', (e) => {
         if (e.target.classList.contains('platform-icon')) {
             updateUIForPlatform(e.target.dataset.platform);
@@ -95,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.status === 'completed') {
                     clearInterval(pollInterval);
                     buttonText.textContent = 'Download Ready!';
-                    window.location.href = data.url;
+                    forceDownload(data.url); // FIXED: Use the correct download function
                     setTimeout(() => {
                         downloaderSection.style.display = 'none';
                         downloadStartedSection.style.display = 'block';
@@ -153,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 pollStatus(data.jobId);
             } else if (data.status === 'completed' && data.url) {
                 buttonText.textContent = 'Download Ready!';
-                window.location.href = data.url;
+                forceDownload(data.url); // FIXED: Use the correct download function for cached results too
                 setTimeout(() => {
                     downloaderSection.style.display = 'none';
                     downloadStartedSection.style.display = 'block';
