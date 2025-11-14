@@ -153,6 +153,7 @@ try {
 
         // By this point, `metadata` should be populated, either from the main try or the fallback catch.
         try {
+            console.log(`[BACKEND LOG] Metadata obtained for ${url}. Title: ${metadata.title}`);
             const rawTitle = metadata.title;
             let finalFilename;
 
@@ -217,7 +218,9 @@ try {
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
             cleanup();
-            return { url: `${BASE_URL}/downloads/${finalFilename}` };
+            const finalUrl = `${BASE_URL}/downloads/${finalFilename}`;
+            console.log(`[BACKEND LOG] Successfully processed ${url}. Final URL: ${finalUrl}`);
+            return { url: finalUrl };
 
         } catch (error) {
             cleanup();
@@ -230,6 +233,7 @@ try {
     // --- API Endpoints ---
     app.post('/start-download', apiKeyMiddleware, (req, res) => {
         const { url, quality, type, platform } = req.body;
+        console.log('[BACKEND LOG] Received /start-download request:', { url, quality, type, platform });
         if (!url || !quality || !type || !platform) return res.status(400).json({ error: 'Missing parameters' });
 
         const cacheKey = `${url}|${quality}|${type}`;

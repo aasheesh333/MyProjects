@@ -390,34 +390,50 @@ footer {
     margin-top: 1.5rem;
 }
 
-.platform-selector-container {
+.platform-scroller-wrapper {
     position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: 2.5rem;
+}
+
+.platform-selector-container {
     overflow-x: auto;
     white-space: nowrap;
-    margin-bottom: 2.5rem;
-    padding: 0 40px; /* Add space for the buttons */
+    padding-bottom: 10px;
     -ms-overflow-style: none;
     scrollbar-width: none;
+    flex-grow: 1; /* Allow the container to take up available space */
 }
 
 .scroller-btn {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background-color: #fff;
-    border: 1px solid #dee2e6;
+    background-color: transparent;
+    border: 2px solid #007bff;
     border-radius: 50%;
-    width: 35px;
-    height: 35px;
+    width: 40px;
+    height: 40px;
     cursor: pointer;
-    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
-    color: #495057;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #007bff;
     transition: all 0.2s ease-in-out;
+    flex-shrink: 0; /* Prevent buttons from shrinking */
+}
+
+.scroller-btn:hover {
+    background-color: #e9ecef;
+    transform: scale(1.05);
+}
+
+.scroller-btn.left {
+    margin-right: 10px;
+}
+
+.scroller-btn.right {
+    margin-left: 10px;
 }
 
 .scroller-btn:hover {
