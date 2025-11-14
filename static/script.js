@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const qualityGroup = document.getElementById('quality-group');
     const qualitySelect = document.getElementById('quality-select');
     const convertBtn = document.getElementById('convert-btn');
+    const buttonText = convertBtn.querySelector('.button-text');
+    const spinner = convertBtn.querySelector('.spinner');
     const urlInput = document.getElementById('url-input');
     const downloaderSection = document.getElementById('downloader-section');
     const downloadStartedSection = document.getElementById('download-started-section');
@@ -12,40 +14,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Platform Configuration ---
     const platformConfig = {
-        'youtube': { types: ['mp3', 'mp4'], quality: true },
-        'instagram': { types: ['mp4', 'image'], quality: false },
-        'facebook': { types: ['mp3', 'mp4'], quality: true },
-        'tiktok': { types: ['mp3', 'mp4'], quality: false },
-        'snapchat': { types: ['mp4'], quality: false },
-        'dailymotion': { types: ['mp3', 'mp4'], quality: true },
-        'x-twitter': { types: ['mp4', 'image'], quality: false },
-        'linkedin': { types: ['mp4'], quality: false },
-        'reddit': { types: ['mp3', 'mp4'], quality: true },
-        'pinterest': { types: ['image'], quality: false },
-        'threads': { types: ['mp4', 'image'], quality: false },
-        'shutterstock': { types: ['image', 'mp4'], quality: false }, // Assuming video/image
-        'viddyoze': { types: ['mp4'], quality: true }, // Assuming quality matters
-        'storyblocks': { types: ['mp4'], quality: true }, // Assuming quality matters
-        'vimeo': { types: ['mp3', 'mp4'], quality: true }
+        'youtube':     { types: ['mp3', 'mp4'], quality: true, premium: false },
+        'instagram':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'facebook':    { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'tiktok':      { types: ['mp3', 'mp4'], quality: false, premium: false },
+        'snapchat':    { types: ['mp4'], quality: false, premium: false },
+        'dailymotion': { types: ['mp3', 'mp4'], quality: true, premium: false },
+        'x-twitter':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'linkedin':    { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'reddit':      { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'pinterest':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
+        'threads':     { types: ['mp4', 'image'], quality: false, premium: true },
+        'shutterstock': { types: ['image', 'mp4'], quality: false, premium: true },
+        'viddyoze':    { types: ['mp4'], quality: false, premium: true },
+        'storyblocks': { types: ['mp4'], quality: false, premium: true },
+        'vimeo':       { types: ['mp3', 'mp4'], quality: true, premium: true }
     };
 
-    let selectedPlatform = 'youtube'; // Default platform
-
-    // --- Progress Bar Elements ---
-    const progressContainer = document.createElement('div');
-    progressContainer.className = 'progress-container';
-    progressContainer.style.display = 'none';
-    const progressStatus = document.createElement('p');
-    progressStatus.id = 'progress-status';
-    const progressBar = document.createElement('div');
-    progressBar.className = 'progress-bar';
-    const progressBarInner = document.createElement('div');
-    progressBarInner.className = 'progress-bar-inner';
-    progressBar.appendChild(progressBarInner);
-    progressContainer.appendChild(progressStatus);
-    progressContainer.appendChild(progressBar);
-    downloaderSection.appendChild(progressContainer);
-
+    let selectedPlatform = 'youtube';
     let pollInterval;
 
     // --- UI Update Functions ---
@@ -53,13 +39,11 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedPlatform = platform;
         const config = platformConfig[platform];
 
-        // Update active button style
         document.querySelectorAll('.platform-icon').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.platform === platform);
         });
 
-        // Update content type dropdown
-        typeSelect.innerHTML = ''; // Clear existing options
+        typeSelect.innerHTML = '';
         config.types.forEach(type => {
             const option = document.createElement('option');
             option.value = type;
@@ -67,17 +51,39 @@ document.addEventListener('DOMContentLoaded', () => {
             typeSelect.appendChild(option);
         });
 
-        // Show/hide quality dropdown
         qualityGroup.style.display = config.quality ? 'block' : 'none';
+        updateQualityOptions(); // Fix for YouTube quality bug
+    }
+
+    // NEW: Function to fix the YouTube quality display bug
+    function updateQualityOptions() {
+        const selectedType = typeSelect.value;
+        const isQualityVisible = qualityGroup.style.display !== 'none';
+
+        if (isQualityVisible) {
+            qualitySelect.querySelectorAll('option').forEach(option => {
+                option.style.display = option.dataset.type === selectedType ? 'block' : 'none';
+            });
+            // Set a default value if the current one is hidden
+            if (qualitySelect.selectedOptions.length === 0 || qualitySelect.selectedOptions[0].style.display === 'none') {
+                for (let option of qualitySelect.options) {
+                    if (option.style.display !== 'none') {
+                        option.selected = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     // --- Event Listeners ---
     platformSlider.addEventListener('click', (e) => {
         if (e.target.classList.contains('platform-icon')) {
-            const platform = e.target.dataset.platform;
-            updateUIForPlatform(platform);
+            updateUIForPlatform(e.target.dataset.platform);
         }
     });
+
+    typeSelect.addEventListener('change', updateQualityOptions);
 
     async function pollStatus(jobId) {
         pollInterval = setInterval(async () => {
@@ -86,13 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!response.ok) throw new Error('Could not get job status.');
                 const data = await response.json();
 
-                progressStatus.textContent = `Status: ${data.status}`;
-                if (data.status === 'queued') progressBarInner.style.width = '25%';
-                else if (data.status === 'processing') progressBarInner.style.width = '60%';
-                else if (data.status === 'completed') {
+                if (data.status === 'completed') {
                     clearInterval(pollInterval);
-                    progressBarInner.style.width = '100%';
-                    progressStatus.textContent = 'Download Ready!';
+                    buttonText.textContent = 'Download Ready!';
                     window.location.href = data.url;
                     setTimeout(() => {
                         downloaderSection.style.display = 'none';
@@ -103,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert(`Error: ${data.error || 'Processing failed.'}`);
                     resetUI();
                 }
+                // No need for queued/processing text update here, it's on the button
             } catch (error) {
                 clearInterval(pollInterval);
                 alert(`Error: ${error.message}`);
@@ -118,16 +121,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        convertBtn.style.display = 'none';
-        progressContainer.style.display = 'block';
-        progressStatus.textContent = 'Status: sending request...';
-        progressBarInner.style.width = '5%';
+        // NEW: Premium platform check
+        const config = platformConfig[selectedPlatform];
+        if (config.premium) {
+            alert('This is a premium platform. Please sign up to download from this site.');
+            return;
+        }
+
+        // NEW: Improved button state
+        convertBtn.disabled = true;
+        buttonText.textContent = 'Processing...';
+        spinner.style.display = 'inline-block';
 
         try {
             const quality = qualitySelect.value;
             const type = typeSelect.value;
 
-            // NEW: Send the selected platform to the backend
             const response = await fetch('/api/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -143,8 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.jobId) {
                 pollStatus(data.jobId);
             } else if (data.status === 'completed' && data.url) {
-                progressStatus.textContent = 'Status: completed (from cache)';
-                progressBarInner.style.width = '100%';
+                buttonText.textContent = 'Download Ready!';
                 window.location.href = data.url;
                 setTimeout(() => {
                     downloaderSection.style.display = 'none';
@@ -161,16 +169,18 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.value = '';
         downloaderSection.style.display = 'block';
         downloadStartedSection.style.display = 'none';
-        convertBtn.style.display = 'block';
-        progressContainer.style.display = 'none';
-        progressBarInner.style.width = '0%';
-        if(pollInterval) clearInterval(pollInterval);
-        // Re-initialize to the default platform
+
+        // NEW: Reset button state
+        convertBtn.disabled = false;
+        buttonText.textContent = 'Convert';
+        spinner.style.display = 'none';
+
+        if (pollInterval) clearInterval(pollInterval);
         updateUIForPlatform('youtube');
     }
 
     convertNextBtn.addEventListener('click', resetUI);
 
     // --- Initial Setup ---
-    updateUIForPlatform(selectedPlatform); // Initialize UI for the default platform
+    updateUIForPlatform(selectedPlatform);
 });

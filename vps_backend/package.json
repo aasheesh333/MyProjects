@@ -12,6 +12,7 @@
     "ffmpeg-static": "^5.2.0",
     "axios": "^1.7.2",
     "uuid": "8.3.2",
-    "archiver": "^5.3.1"
+    "archiver": "^5.3.1",
+    "dotenv": "^16.3.1"
   }
 }

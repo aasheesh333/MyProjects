@@ -154,23 +154,58 @@ h2 {
 
 .downloader-controls {
     display: flex;
+    flex-direction: column; /* Stack the options container and button vertically */
+    gap: 1.5rem; /* Increased gap for better spacing */
+    margin-top: 1.5rem; /* Add margin above the controls */
+}
+
+.options-container {
+    display: flex;
     justify-content: space-between;
-    align-items: flex-end;
     gap: 1rem;
+}
+
+.option-group {
+    flex: 1; /* Make both option groups take equal space */
+    display: flex;
+    flex-direction: column;
 }
 
 #convert-btn {
     background-color: #007bff;
     color: white;
     border: none;
-    padding: 1rem 1.5rem;
+    padding: 1rem; /* Uniform padding */
     cursor: pointer;
     border-radius: 10px;
-    font-size: 1rem;
+    font-size: 1.1rem; /* Slightly larger font */
     font-weight: 600;
     transition: background-color 0.3s ease;
-    height: fit-content;
+    width: 100%; /* Make the button full-width */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
 }
+
+#convert-btn:hover {
+    background-color: #0056b3;
+}
+
+/* Spinner Animation */
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 
 #convert-btn:hover {
     background-color: #0056b3;
