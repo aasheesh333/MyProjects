@@ -99,36 +99,12 @@ try {
         return finalTitle;
     }
 
-    // --- NEW: Custom Pinterest Image Extractor ---
-    async function extractPinterestImageUrl(pageUrl) {
-        try {
-            const { data: html } = await axios.get(pageUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-            });
-
-            const match = html.match(/"image":"([^"]+)"/);
-            if (match && match[1]) {
-                return match[1];
-            }
-            throw new Error('Could not find image URL in Pinterest page metadata.');
-        } catch (error) {
-            console.error(`[Pinterest Extractor] Failed to extract image from ${pageUrl}:`, error.message);
-            throw new Error('Pinterest image extraction failed.');
-        }
-    }
-
-
     // --- Core Processing Logic ---
     async function processDownload({ url, quality, type, platform }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
             console.log(`[Cache HIT] Returning for: ${url}`);
-            const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
-                ? `${BASE_URL}/downloads/${cache[cacheKey].filename}`
-                : `/downloads/${cache[cacheKey].filename}`;
-            return { url: finalUrl };
+            return { url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` };
         }
         console.log(`[Cache MISS] Starting new download for: ${url}`);
 
@@ -172,34 +148,10 @@ try {
         }
 
         try {
-            if (platform === 'pinterest' && type === 'image') {
-                const imageUrl = await extractPinterestImageUrl(url);
-                const rawTitle = `Pinterest Image by JusDown`;
-                const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
-                const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
-                const finalFilename = `${baseFilename}${extension}`;
-                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-
-                const response = await axios({ url: imageUrl, responseType: 'stream' });
-                const writer = fs.createWriteStream(finalFilepath);
-                response.data.pipe(writer);
-                await new Promise((resolve, reject) => {
-                    writer.on('finish', resolve);
-                    writer.on('error', reject);
-                });
-
-                cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
-                cleanup();
-                const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
-                    ? `${BASE_URL}/downloads/${finalFilename}`
-                    : `/downloads/${finalFilename}`;
-                return { url: finalUrl };
-            }
-
             const rawTitle = metadata.title;
             let finalFilename;
 
-            if (metadata.entries && (type === 'image' || type === 'mp4')) {
+            if (metadata.entries && (type === 'image' || type === 'mp4' || type === 'mp3')) {
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
                 finalFilename = `${baseFilename}.zip`;
 
@@ -257,10 +209,7 @@ try {
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
             cleanup();
-            const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
-                ? `${BASE_URL}/downloads/${finalFilename}`
-                : `/downloads/${finalFilename}`;
-            return { url: finalUrl };
+            return { url: `${BASE_URL}/downloads/${finalFilename}` };
 
         } catch (error) {
             cleanup();
@@ -276,10 +225,7 @@ try {
 
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
-                ? `${BASE_URL}/downloads/${cache[cacheKey].filename}`
-                : `/downloads/${cache[cacheKey].filename}`;
-            return res.json({ jobId: null, status: 'completed', url: finalUrl });
+            return res.json({ jobId: null, status: 'completed', url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` });
         }
 
         const jobId = uuidv4();
