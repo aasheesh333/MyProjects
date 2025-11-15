@@ -123,7 +123,7 @@ try {
             metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
         } catch (error) {
             const stderr = error.stderr || '';
-            const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
+            const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post') || stderr.includes('Requested format is not available');
 
             if (type === 'image' && isNoVideoError) {
                 console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
@@ -184,32 +184,56 @@ try {
                 });
             }
             else {
-                if (type === 'mp3') {
-                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
-                    finalFilename = `${baseFilename}.mp3`;
-                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                    const audioUrl = metadata.url || (await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best' })).stdout.trim().split('\n')[0];
-                    if (!audioUrl) throw new Error('Could not retrieve valid audio URL.');
-                    const audioPath = path.join(requestDir, `audio_source`);
+                const baseFilename = formatFilename({ title: rawTitle, type: type.toUpperCase(), quality: quality });
+                finalFilename = `${baseFilename}.${type}`; // e.g., .mp4 or .mp3
+
+                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+
+                // --- Get best video and audio URLs ---
+                const bestVideo = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec === 'none' && f.height <= parseInt(quality));
+                const videoUrl = bestVideo ? bestVideo.url : metadata.formats.find(f => f.vcodec !== 'none' && f.acodec === 'none')?.url;
+
+                const bestAudio = metadata.formats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
+                const audioUrl = bestAudio ? bestAudio.url : metadata.formats.find(f => f.acodec !== 'none')?.url;
+
+                if (!videoUrl || !audioUrl) {
+                    // Fallback for streams that have both audio and video
+                    const directUrl = metadata.url || (await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: `best[height<=${parseInt(quality)}]` })).stdout.trim().split('\n')[0];
+                    if (!directUrl) throw new Error('Could not retrieve a valid download URL.');
+                    await ytdlp.exec(url, { ...commonYtdlpOptions, format: `best[height<=${parseInt(quality)}]`, output: finalFilepath, recodeVideo: 'mp4' });
+
+                } else {
+                     // --- Download video and audio streams ---
+                    const videoPath = path.join(requestDir, 'video_source');
+                    const videoStream = await axios({ method: 'get', url: videoUrl, responseType: 'stream' });
+                    const videoWriter = fs.createWriteStream(videoPath);
+                    videoStream.data.pipe(videoWriter);
+                    await new Promise((resolve, reject) => { videoWriter.on('finish', resolve); videoWriter.on('error', reject); });
+
+                    const audioPath = path.join(requestDir, 'audio_source');
                     const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
                     const audioWriter = fs.createWriteStream(audioPath);
                     audioStream.data.pipe(audioWriter);
                     await new Promise((resolve, reject) => { audioWriter.on('finish', resolve); audioWriter.on('error', reject); });
-                    await new Promise((resolve, reject) => {
-                        exec(`"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
-                    });
-                } else { // MP4 logic
-                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
-                    finalFilename = `${baseFilename}.mp4`;
-                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                    const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
-                    await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
+
+                    // --- Merge with ffmpeg ---
+                    if (type === 'mp3') {
+                        await new Promise((resolve, reject) => {
+                            exec(`"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
+                        });
+                    } else { // mp4
+                        await new Promise((resolve, reject) => {
+                            exec(`"${ffmpeg}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
+                        });
+                    }
                 }
             }
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
             cleanup();
-            return { url: `${BASE_URL}/downloads/${finalFilename}` };
+            // --- FIX: Ensure the returned URL is absolute ---
+            const finalUrl = new URL(path.join('downloads', finalFilename), BASE_URL).toString();
+            return { url: finalUrl };
 
         } catch (error) {
             cleanup();
