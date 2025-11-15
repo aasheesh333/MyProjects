@@ -99,12 +99,36 @@ try {
         return finalTitle;
     }
 
+    // --- NEW: Custom Pinterest Image Extractor ---
+    async function extractPinterestImageUrl(pageUrl) {
+        try {
+            const { data: html } = await axios.get(pageUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+
+            const match = html.match(/"image":"([^"]+)"/);
+            if (match && match[1]) {
+                return match[1];
+            }
+            throw new Error('Could not find image URL in Pinterest page metadata.');
+        } catch (error) {
+            console.error(`[Pinterest Extractor] Failed to extract image from ${pageUrl}:`, error.message);
+            throw new Error('Pinterest image extraction failed.');
+        }
+    }
+
+
     // --- Core Processing Logic ---
-    async function processDownload({ url, quality, type }) {
+    async function processDownload({ url, quality, type, platform }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
             console.log(`[Cache HIT] Returning for: ${url}`);
-            return { url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` };
+            const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
+                ? `${BASE_URL}/downloads/${cache[cacheKey].filename}`
+                : `/downloads/${cache[cacheKey].filename}`;
+            return { url: finalUrl };
         }
         console.log(`[Cache MISS] Starting new download for: ${url}`);
 
@@ -120,14 +144,11 @@ try {
 
         let metadata;
         try {
-            // Attempt to get full JSON metadata first. This is best for videos and galleries.
             metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
         } catch (error) {
             const stderr = error.stderr || '';
             const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
 
-            // If the user wants an image and the error is "no video", it's not a real error.
-            // We fall back to fetching just the thumbnail and title.
             if (type === 'image' && isNoVideoError) {
                 console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
                 try {
@@ -144,20 +165,40 @@ try {
                     throw fallbackError;
                 }
             } else {
-                // This is a genuine error, so we should fail the job.
                 cleanup();
                 console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
                 throw error;
             }
         }
 
-        // By this point, `metadata` should be populated, either from the main try or the fallback catch.
         try {
-            console.log(`[BACKEND LOG] Metadata obtained for ${url}. Title: ${metadata.title}`);
+            if (platform === 'pinterest' && type === 'image') {
+                const imageUrl = await extractPinterestImageUrl(url);
+                const rawTitle = `Pinterest Image by JusDown`;
+                const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
+                const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
+                const finalFilename = `${baseFilename}${extension}`;
+                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+
+                const response = await axios({ url: imageUrl, responseType: 'stream' });
+                const writer = fs.createWriteStream(finalFilepath);
+                response.data.pipe(writer);
+                await new Promise((resolve, reject) => {
+                    writer.on('finish', resolve);
+                    writer.on('error', reject);
+                });
+
+                cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
+                cleanup();
+                const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
+                    ? `${BASE_URL}/downloads/${finalFilename}`
+                    : `/downloads/${finalFilename}`;
+                return { url: finalUrl };
+            }
+
             const rawTitle = metadata.title;
             let finalFilename;
 
-            // --- Gallery/Playlist Logic ---
             if (metadata.entries && (type === 'image' || type === 'mp4')) {
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
                 finalFilename = `${baseFilename}.zip`;
@@ -176,7 +217,6 @@ try {
                 }
                 await archive.finalize();
             }
-            // --- Single Image Logic ---
             else if (type === 'image') {
                 const imageUrl = metadata.thumbnail || metadata.url;
                 if (!imageUrl) throw new Error('Could not find image URL.');
@@ -191,7 +231,6 @@ try {
                     writer.on('finish', resolve); writer.on('error', reject);
                 });
             }
-            // --- Single Video/Audio Logic ---
             else {
                 if (type === 'mp3') {
                     const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
@@ -218,13 +257,13 @@ try {
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
             cleanup();
-            const finalUrl = `${BASE_URL}/downloads/${finalFilename}`;
-            console.log(`[BACKEND LOG] Successfully processed ${url}. Final URL: ${finalUrl}`);
+            const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
+                ? `${BASE_URL}/downloads/${finalFilename}`
+                : `/downloads/${finalFilename}`;
             return { url: finalUrl };
 
         } catch (error) {
             cleanup();
-            // This second catch block handles errors *after* getting metadata (e.g., download failed)
             console.error(`Post-metadata processing failed for ${url}:`, JSON.stringify(error, null, 2));
             throw error;
         }
@@ -233,12 +272,14 @@ try {
     // --- API Endpoints ---
     app.post('/start-download', apiKeyMiddleware, (req, res) => {
         const { url, quality, type, platform } = req.body;
-        console.log('[BACKEND LOG] Received /start-download request:', { url, quality, type, platform });
         if (!url || !quality || !type || !platform) return res.status(400).json({ error: 'Missing parameters' });
 
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            return res.json({ jobId: null, status: 'completed', url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` });
+            const finalUrl = (BASE_URL && BASE_URL.startsWith('https'))
+                ? `${BASE_URL}/downloads/${cache[cacheKey].filename}`
+                : `/downloads/${cache[cacheKey].filename}`;
+            return res.json({ jobId: null, status: 'completed', url: finalUrl });
         }
 
         const jobId = uuidv4();
