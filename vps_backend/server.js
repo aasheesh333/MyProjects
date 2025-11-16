@@ -10,11 +10,21 @@ try {
     const axios = require('axios');
     const archiver = require('archiver');
 
-    // --- Wrapper to force use of system yt-dlp binary ---
-    const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
-    const ytdlp = (url, options) => ytdlpExec(url, { ...options, binaryPath: YTDLP_BINARY_PATH });
-    ytdlp.exec = (url, options) => ytdlpExec.exec(url, { ...options, binaryPath: YTDLP_BINARY_PATH });
-
+    // --- Correct wrapper to force use of system yt-dlp binary ---
+    const ytdlp = (url, args = {}) => {
+      return ytdlpExec(url, {
+        ...args,
+        useSystemBinary: true,
+        binaryPath: "/usr/local/bin/yt-dlp",
+      });
+    };
+    ytdlp.exec = (url, args = {}) => {
+        return ytdlpExec.exec(url, {
+          ...args,
+          useSystemBinary: true,
+          binaryPath: "/usr/local/bin/yt-dlp",
+        });
+    };
 
     const app = express();
     const PORT = process.env.PORT || 5002;
