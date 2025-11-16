@@ -54,7 +54,13 @@ try {
             jobStatus[task.jobId] = { status: 'completed', url: result.url };
         } catch (error) {
             console.error(`[Job ${task.jobId}] Processing failed:`, error.message);
-            jobStatus[task.jobId] = { status: 'failed', error: 'Processing failed.' };
+            // NEW: Better error messages
+            const stderr = String(error.stderr || '').toLowerCase();
+            let userError = 'Processing failed.';
+            if (stderr.includes('login required') || stderr.includes('registered users') || stderr.includes('account credentials')) {
+                userError = 'This content is private or requires a login to access.';
+            }
+            jobStatus[task.jobId] = { status: 'failed', error: userError };
         } finally {
             activeJobs--;
             processQueue();
@@ -128,12 +134,14 @@ try {
             if (type === 'image' && isNoVideoError) {
                 console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
                 try {
-                    const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
+                    // FIX: Don't get title for images, as it can fail. Get only the thumbnail.
                     const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
+                    const thumbnailUrl = String(thumbnailOutput.stdout || '').trim().split('\n')[0];
+                    if (!thumbnailUrl) throw new Error('Could not extract thumbnail URL.');
 
                     metadata = {
-                        title: titleOutput.stdout.trim(),
-                        thumbnail: thumbnailOutput.stdout.trim(),
+                        title: `image_download_${uuidv4()}`, // Use a generic title
+                        thumbnail: thumbnailUrl,
                     };
                 } catch (fallbackError) {
                     cleanup();
