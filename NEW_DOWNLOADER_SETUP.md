@@ -1,17 +1,17 @@
-# JusDown VPS Backend Setup Guide
+# JusDown New Downloader Setup Guide (v2)
 
-This guide will walk you through setting up the new, reliable JusDown backend on a fresh Ubuntu VPS.
+This guide will walk you through setting up the new, multi-library JusDown backend on a fresh Ubuntu VPS. This version does **not** use the system `yt-dlp`.
 
 ### Step 1: Log in to Your VPS
 
-First, connect to your VPS from your computer using SSH. Replace `your_vps_ip` with your server's IP address.
+Connect to your server using SSH.
 ```bash
 ssh root@your_vps_ip
 ```
 
 ### Step 2: Install Essential Tools
 
-We need `git` to download the code, `node` and `npm` to run it, and `pm2` to keep it running forever.
+We need `git` to download the code, and `node` & `npm` to run the server.
 ```bash
 # Update package lists
 sudo apt-get update
@@ -22,10 +22,6 @@ sudo apt-get install -y git
 # Install Node.js (Version 18.x is recommended)
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
-
-# Install yt-dlp (the downloader) to the correct location
-sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-sudo chmod a+rx /usr/local/bin/yt-dlp
 
 # Install PM2 (a process manager to keep your server running)
 sudo npm install -g pm2
@@ -40,7 +36,7 @@ git clone https://github.com/aasheesh333/MyProjects.git
 
 ### Step 4: Set Up the Backend
 
-Now, we will go into the backend folder and set everything up.
+Go into the backend folder and install the new libraries.
 ```bash
 # Go into the project directory
 cd MyProjects/vps_backend
@@ -51,7 +47,7 @@ npm install
 
 ### Step 5: Configure Your Environment
 
-We need to create a `.env` file to store your secret API key and URLs.
+Create a `.env` file for your secrets.
 ```bash
 # Create and open the .env file with a text editor
 nano .env
@@ -60,34 +56,33 @@ Copy the following lines into the file. **You must change these values!**
 
 ```env
 # A strong, random secret key that your frontend will use to connect.
-# Example: MY_SUPER_SECRET_KEY_12345
-API_KEY=YOUR_SECRET_API_KEY
+API_KEY=YOUR_SECRET_API_KEY_HERE
 
-# The public URL of THIS server.
+# The public URL of THIS server, including the port.
 # Example: http://123.45.67.89:5002
 BASE_URL=http://YOUR_VPS_IP:5002
 
-# The port the server will run on. 5002 is a good choice.
+# The port the server will run on.
 PORT=5002
 ```
 To save the file in `nano`, press `Ctrl+X`, then `Y`, then `Enter`.
 
 ### Step 6: Start the Backend Server with PM2
 
-Now, we will start the server using `pm2`. This will make sure it automatically restarts if it ever crashes.
+Start the server using `pm2`.
 ```bash
 pm2 start server.js --name jusdown-backend
 ```
 
 ### Step 7: Save the PM2 Process
 
-This makes sure your backend automatically starts when you reboot your VPS.
+This ensures your backend starts automatically if the VPS reboots.
 ```bash
 pm2 save
 ```
 
 **Setup Complete!**
 
-Your backend is now running. You can check its status any time with `pm2 status` or view its logs with `pm2 logs jusdown-backend`.
+Your new backend is now running. You can check its status with `pm2 status` or view its logs with `pm2 logs jusdown-backend`.
 
-Remember to also update the `.env` file on your **frontend** server (on Render.com) to match the `API_KEY` you chose here.
+**Important:** Remember to update the `.env` file on your **frontend** server (on Render.com) to match the `API_KEY` and `BACKEND_URL` you chose here. The `BACKEND_URL` should be the same as your `BASE_URL`.

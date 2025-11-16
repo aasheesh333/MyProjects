@@ -1,7 +1,7 @@
 {
-  "name": "vps-backend",
+  "name": "vps-backend-new",
   "version": "1.0.0",
-  "description": "A new, reliable backend for JusDown.",
+  "description": "A new, multi-library backend for JusDown.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +11,11 @@
     "axios": "^1.7.2",
     "uuid": "8.3.2",
     "archiver": "^5.3.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "youtubei.js": "^7.0.0",
+    "priyansh-ig-downloader": "^2.0.4",
+    "fb-downloader": "^1.0.2",
+    "pinterest-dl": "^1.0.1",
+    "ffmpeg-static": "^5.2.0"
   }
 }

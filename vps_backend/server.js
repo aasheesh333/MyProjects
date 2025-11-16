@@ -4,142 +4,142 @@ try {
     const path = require('path');
     const fs = require('fs');
     const { v4: uuidv4 } = require('uuid');
-    const { spawn } = require('child_process');
     const axios = require('axios');
     const archiver = require('archiver');
+    const ffmpeg = require('ffmpeg-static');
+    const { exec } = require('child_process');
+
+    // --- Platform Specific Libraries ---
+    const { Innertube } = require('youtubei.js');
+    const instagramDl = require('priyansh-ig-downloader');
+    const getFBInfo = require('fb-downloader');
+    const pinterestDl = require('pinterest-dl');
 
     // --- Configuration ---
     const app = express();
     const PORT = process.env.PORT || 5002;
-    const API_KEY = process.env.API_KEY; // For security
+    const API_KEY = process.env.API_KEY;
     const BASE_URL = process.env.BASE_URL;
-    const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
-
-    // --- Reliable yt-dlp Runner ---
-    const runYtDlp = (args) => {
-        return new Promise((resolve, reject) => {
-            const ytdlpProcess = spawn(YTDLP_BINARY_PATH, args);
-            let stdout = '';
-            let stderr = '';
-            ytdlpProcess.stdout.on('data', (data) => { stdout += data.toString(); });
-            ytdlpProcess.stderr.on('data', (data) => { stderr += data.toString(); });
-            ytdlpProcess.on('close', (code) => {
-                if (code === 0) {
-                    resolve(stdout);
-                } else {
-                    const error = new Error(`yt-dlp exited with code ${code}`);
-                    error.stderr = stderr;
-                    reject(error);
-                }
-            });
-            ytdlpProcess.on('error', (err) => reject(err));
-        });
-    };
 
     // --- Setup Directories ---
     const DOWNLOAD_DIR = path.join(__dirname, 'public_downloads');
     if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
     app.use('/downloads', express.static(DOWNLOAD_DIR));
-
     app.use(express.json());
 
     // --- Security Middleware ---
     const apiKeyMiddleware = (req, res, next) => {
         const providedKey = req.headers['x-api-key'];
-        if (!API_KEY || providedKey !== API_KEY) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
+        if (!API_KEY || providedKey !== API_KEY) return res.status(401).json({ error: 'Unauthorized' });
         next();
     };
 
     // --- Job Management ---
     const jobStatus = {};
-
-    // --- Caching ---
     const cache = {};
-    setInterval(() => {
-        const now = Date.now();
-        for (const key in cache) {
-            if (now - cache[key].timestamp > 60 * 60 * 1000) { // 1-hour cache
-                const filePath = path.join(DOWNLOAD_DIR, cache[key].filename);
-                fs.unlink(filePath, (err) => {
-                    if (err) console.error(`Error deleting cached file: ${err}`);
-                });
-                delete cache[key];
-            }
-        }
-    }, 5 * 60 * 1000);
 
-    function formatFilename({ title, type, quality }) {
+    // --- Utility Functions ---
+    const formatFilename = ({ title, type, quality }) => {
         const safeTitle = (title || `download_${uuidv4()}`).replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
-        let qualityString = '';
-        if (type === 'mp3' && quality) qualityString = `${quality}kbps`;
-        if (type === 'mp4' && quality) qualityString = `${quality}p`;
         const typeString = type.toUpperCase();
-        return qualityString ? `JusDown - ${safeTitle} - ${typeString} | ${qualityString}` : `JusDown - ${safeTitle} - ${typeString}`;
-    }
+        return `JusDown - ${safeTitle} - ${typeString}`;
+    };
+
+    const downloadFile = async (url, filepath) => {
+        const writer = fs.createWriteStream(filepath);
+        const response = await axios({ url, method: 'GET', responseType: 'stream' });
+        response.data.pipe(writer);
+        return new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+    };
+
+    // --- Platform Handlers ---
+    const handleYoutube = async ({ url, type }) => {
+        const youtube = await Innertube.create();
+        const info = await youtube.getInfo(url);
+        const format = type === 'mp3' ? info.formats.find(f => f.itag === 140) : info.formats.find(f => f.itag === 18);
+        if (!format) throw new Error('Could not find a suitable format.');
+        return [format.url];
+    };
+
+    const handleInstagram = async ({ url }) => {
+        const results = await instagramDl(url);
+        return results.map(r => r.download_link);
+    };
+
+    const handleFacebook = async ({ url }) => {
+        const result = await getFBInfo(url);
+        return [result.hd || result.sd];
+    };
+
+    const handlePinterest = async ({ url }) => {
+        const results = await pinterestDl(url);
+        return results.map(r => r.url);
+    };
 
     // --- Core Download Logic ---
-    async function processDownload({ url, quality, type }) {
-        const cacheKey = `${url}|${quality}|${type}`;
+    async function processDownload({ url, quality, type, platform }) {
+        const cacheKey = `${url}|${type}`;
         if (cache[cacheKey]) {
             console.log(`[Cache HIT] for: ${url}`);
             return new URL(path.join('downloads', cache[cacheKey].filename), BASE_URL).toString();
         }
         console.log(`[Cache MISS] for: ${url}`);
 
-        const commonArgs = ['--no-check-certificate', '--user-agent', 'Mozilla/5.0', '--referer', 'https://www.google.com/'];
+        let mediaUrls = [];
+        let title = `download_${uuidv4()}`;
 
-        const metadataJson = await runYtDlp([url, ...commonArgs, '--dump-single-json', '--ignore-errors']);
-        let metadata;
-        try {
-            metadata = JSON.parse(metadataJson);
-        } catch (e) {
-            throw new Error('Could not retrieve valid media information.');
+        if (platform === 'youtube') {
+            mediaUrls = await handleYoutube({ url, type });
+            const youtube = await Innertube.create();
+            const info = await youtube.getInfo(url);
+            title = info.basic_info.title;
+        } else if (platform === 'instagram') {
+            mediaUrls = await handleInstagram({ url });
+        } else if (platform === 'facebook') {
+            mediaUrls = await handleFacebook({ url });
+        } else if (platform === 'pinterest') {
+            mediaUrls = await handlePinterest({ url });
+        } else {
+            throw new Error(`Platform '${platform}' is not supported in this new version.`);
         }
 
-        if (!metadata || Object.keys(metadata).length === 0) {
-            throw new Error('No media information found at the provided link.');
-        }
+        if (!mediaUrls || mediaUrls.length === 0) throw new Error('No downloadable media found.');
 
-        const rawTitle = metadata.title || `download_${uuidv4()}`;
         let finalFilename;
-
-        if (metadata.entries) { // Gallery/Carousel post
-            finalFilename = `${formatFilename({ title: rawTitle, type: 'Gallery' })}.zip`;
+        if (mediaUrls.length > 1) {
+            finalFilename = `${formatFilename({ title, type: 'Gallery' })}.zip`;
             const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
             const archive = archiver('zip');
             archive.pipe(fs.createWriteStream(zipFilePath));
-            for (let i = 0; i < metadata.entries.length; i++) {
-                const entry = metadata.entries[i];
-                const mediaUrl = entry.url || entry.formats?.find(f => f.url)?.url;
-                if (!mediaUrl) continue;
+            for (let i = 0; i < mediaUrls.length; i++) {
                 try {
-                    const res = await axios({ url: mediaUrl, responseType: 'stream' });
-                    const ext = path.extname(new URL(mediaUrl).pathname) || '.jpg';
-                    archive.append(res.data, { name: `${rawTitle}_${i + 1}${ext}` });
-                } catch (e) {
-                    console.error(`Skipping gallery item ${i+1}: ${e.message}`);
-                }
+                    const res = await axios({ url: mediaUrls[i], responseType: 'stream' });
+                    archive.append(res.data, { name: `${title}_${i + 1}.mp4` });
+                } catch (e) { console.error(`Skipping gallery item ${i+1}: ${e.message}`); }
             }
             await archive.finalize();
-        } else if (type === 'image') {
-            const imageUrl = metadata.thumbnail;
-            if (!imageUrl) throw new Error('No downloadable image found.');
-            finalFilename = `${formatFilename({ title: rawTitle, type: 'Image' })}${path.extname(new URL(imageUrl).pathname) || '.jpg'}`;
-            const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-            const res = await axios({ url: imageUrl, responseType: 'stream' });
-            res.data.pipe(fs.createWriteStream(finalFilepath));
-            await new Promise((resolve, reject) => res.data.on('end', resolve).on('error', reject));
-        } else if (type === 'mp3') {
-            finalFilename = `${formatFilename({ title: rawTitle, type: 'MP3', quality })}.mp3`;
-            await runYtDlp([url, ...commonArgs, '--extract-audio', '--audio-format', 'mp3', '-o', path.join(DOWNLOAD_DIR, finalFilename)]);
-        } else if (type === 'mp4') {
-            finalFilename = `${formatFilename({ title: rawTitle, type: 'MP4', quality })}.mp4`;
-            const format = `bestvideo[height<=${parseInt(quality)}]+bestaudio/best[height<=${parseInt(quality)}]/best`;
-            await runYtDlp([url, ...commonArgs, '--format', format, '-o', path.join(DOWNLOAD_DIR, finalFilename), '--recode-video', 'mp4']);
         } else {
-            throw new Error(`Unsupported type: ${type}`);
+            const mediaUrl = mediaUrls[0];
+            if (type === 'mp3') {
+                const tempVideoPath = path.join(DOWNLOAD_DIR, `${uuidv4()}.tmp`);
+                await downloadFile(mediaUrl, tempVideoPath);
+                finalFilename = `${formatFilename({ title, type, quality })}.mp3`;
+                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                await new Promise((resolve, reject) => {
+                    exec(`"${ffmpeg}" -i "${tempVideoPath}" -b:a 128k "${finalFilepath}"`, (err) => {
+                        fs.unlink(tempVideoPath, () => {}); // Clean up temp file
+                        if (err) return reject(err);
+                        resolve();
+                    });
+                });
+            } else { // For mp4 and image
+                const extension = path.extname(new URL(mediaUrl).pathname) || '.mp4';
+                finalFilename = `${formatFilename({ title, type })}${extension}`;
+                await downloadFile(mediaUrl, path.join(DOWNLOAD_DIR, finalFilename));
+            }
         }
 
         cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
@@ -148,22 +148,19 @@ try {
 
     // --- API Endpoints ---
     app.post('/start-download', apiKeyMiddleware, async (req, res) => {
-        const { url, quality, type } = req.body;
-        if (!url || !type) return res.status(400).json({ error: 'Missing parameters' });
+        const { url, quality, type, platform } = req.body;
+        if (!url || !type || !platform) return res.status(400).json({ error: 'Missing parameters.' });
 
         const jobId = uuidv4();
         jobStatus[jobId] = { status: 'queued' };
         res.json({ jobId });
 
         try {
-            const downloadUrl = await processDownload({ url, quality, type });
+            const downloadUrl = await processDownload({ url, quality, type, platform });
             jobStatus[jobId] = { status: 'completed', url: downloadUrl };
         } catch (error) {
-            console.error(`[Job ${jobId}] Failed:`, error.message, error.stderr || '');
-            const stderr = String(error.stderr || '').toLowerCase();
-            let userError = 'Processing failed. The link may be invalid or private.';
-            if (stderr.includes('login required')) userError = 'This content is private or requires a login.';
-            jobStatus[jobId] = { status: 'failed', error: userError };
+            console.error(`[Job ${jobId}] Failed:`, error);
+            jobStatus[jobId] = { status: 'failed', error: error.message || 'Processing failed.' };
         }
     });
 
@@ -175,7 +172,7 @@ try {
 
     // --- Server Startup ---
     app.listen(PORT, () => {
-        console.log(`VPS Backend is running on http://localhost:${PORT}`);
+        console.log(`New VPS Backend is running on http://localhost:${PORT}`);
     });
 
 } catch (e) {
