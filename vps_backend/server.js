@@ -222,7 +222,7 @@ try {
 
 
     // --- API Endpoints ---
-    app.post('/start-download', apiKeyMiddleware, (req, res) => {
+    app.post('/start-download', (req, res) => {
         const { url, quality, type, platform } = req.body;
         if (!url || !quality || !type || !platform) return res.status(400).json({ error: 'Missing parameters' });
 
@@ -239,7 +239,7 @@ try {
         res.json({ jobId });
     });
 
-    app.get('/status/:jobId', apiKeyMiddleware, (req, res) => {
+    app.get('/status/:jobId', (req, res) => {
         const { jobId } = req.params;
         const status = jobStatus[jobId];
         if (!status) return res.status(404).json({ error: 'Job not found' });
