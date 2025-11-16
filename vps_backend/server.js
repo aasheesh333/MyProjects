@@ -10,18 +10,16 @@ try {
     const axios = require('axios');
     const archiver = require('archiver');
 
-    // --- Correct wrapper to force use of system yt-dlp binary ---
+    // --- FINAL Correct wrapper to force use of system yt-dlp binary ---
     const ytdlp = (url, args = {}) => {
       return ytdlpExec(url, {
         ...args,
-        useSystemBinary: true,
         binaryPath: "/usr/local/bin/yt-dlp",
       });
     };
     ytdlp.exec = (url, args = {}) => {
         return ytdlpExec.exec(url, {
           ...args,
-          useSystemBinary: true,
           binaryPath: "/usr/local/bin/yt-dlp",
         });
     };
