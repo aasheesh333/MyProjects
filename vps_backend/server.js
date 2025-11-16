@@ -4,11 +4,17 @@ try {
     const path = require('path');
     const fs = require('fs');
     const { v4: uuidv4 } = require('uuid');
-    const ytdlp = require('yt-dlp-exec');
+    const ytdlpExec = require('yt-dlp-exec');
     const { exec } = require('child_process');
     const ffmpeg = require('ffmpeg-static');
     const axios = require('axios');
     const archiver = require('archiver');
+
+    // --- Wrapper to force use of system yt-dlp binary ---
+    const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
+    const ytdlp = (url, options) => ytdlpExec(url, { ...options, binaryPath: YTDLP_BINARY_PATH });
+    ytdlp.exec = (url, options) => ytdlpExec.exec(url, { ...options, binaryPath: YTDLP_BINARY_PATH });
+
 
     const app = express();
     const PORT = process.env.PORT || 5002;
