@@ -4,25 +4,45 @@ try {
     const path = require('path');
     const fs = require('fs');
     const { v4: uuidv4 } = require('uuid');
-    const ytdlpExec = require('yt-dlp-exec');
-    const { exec } = require('child_process');
+    const { exec, spawn } = require('child_process');
     const ffmpeg = require('ffmpeg-static');
     const axios = require('axios');
     const archiver = require('archiver');
 
     // --- FINAL Correct wrapper to force use of system yt-dlp binary ---
-    const ytdlp = (url, args = {}) => {
-      return ytdlpExec(url, {
-        ...args,
-        binaryPath: "/usr/local/bin/yt-dlp",
-      });
-    };
-    ytdlp.exec = (url, args = {}) => {
-        return ytdlpExec.exec(url, {
-          ...args,
-          binaryPath: "/usr/local/bin/yt-dlp",
+    const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
+
+    // A new, reliable Promise-based wrapper for yt-dlp using spawn
+    const runYtDlp = (args) => {
+        return new Promise((resolve, reject) => {
+            const ytdlpProcess = spawn(YTDLP_BINARY_PATH, args);
+            let stdout = '';
+            let stderr = '';
+
+            ytdlpProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            ytdlpProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            ytdlpProcess.on('close', (code) => {
+                if (code === 0) {
+                    resolve(stdout);
+                } else {
+                    const error = new Error(`yt-dlp exited with code ${code}`);
+                    error.stderr = stderr;
+                    reject(error);
+                }
+            });
+
+             ytdlpProcess.on('error', (err) => {
+                reject(err);
+            });
         });
     };
+
 
     const app = express();
     const PORT = process.env.PORT || 5002;
@@ -43,15 +63,6 @@ try {
 
     app.use(express.json());
 
-    // --- API Key Middleware ---
-    const apiKeyMiddleware = (req, res, next) => {
-        const providedKey = req.headers['x-api-key'];
-        if (!API_KEY || providedKey !== API_KEY) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-        next();
-    };
-
     // --- Job Queue ---
     const jobQueue = [];
     const jobStatus = {};
@@ -67,7 +78,7 @@ try {
             const result = await processDownload(task);
             jobStatus[task.jobId] = { status: 'completed', url: result.url };
         } catch (error) {
-            console.error(`[Job ${task.jobId}] Processing failed:`, error.message);
+            console.error(`[Job ${task.jobId}] Processing failed:`, error.message, error.stderr || '');
             const stderr = String(error.stderr || '').toLowerCase();
             let userError = 'Processing failed. Please try a different link.';
             if (stderr.includes('login required') || stderr.includes('registered users') || stderr.includes('account credentials')) {
@@ -128,18 +139,26 @@ try {
         }
         console.log(`[Cache MISS] Starting new download for: ${url}`);
 
-        const commonYtdlpOptions = {
-            noCheckCertificate: true,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            referer: 'https://www.google.com/',
-        };
+        const commonYtdlpArgs = [
+            '--no-check-certificate',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            '--referer', 'https://www.google.com/',
+        ];
 
         // 1. Get Metadata first
-        const metadata = await ytdlp(url, {
-            ...commonYtdlpOptions,
-            dumpSingleJson: true,
-            ignoreErrors: true,
-        });
+        const metadataJson = await runYtDlp([
+            url,
+            ...commonYtdlpArgs,
+            '--dump-single-json',
+            '--ignore-errors',
+        ]);
+
+        let metadata;
+        try {
+            metadata = JSON.parse(metadataJson);
+        } catch (e) {
+             throw new Error('Could not retrieve valid media information from the link.');
+        }
 
         if (!metadata || Object.keys(metadata).length === 0) {
             throw new Error('Could not retrieve any media information from the link.');
@@ -148,7 +167,7 @@ try {
         const rawTitle = metadata.title || `download_${uuidv4()}`;
         let finalFilename;
 
-        // 2. Handle download based on type, letting yt-dlp do all the heavy work
+        // 2. Handle download based on type
         if (metadata.entries) {
             const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
             finalFilename = `${baseFilename}.zip`;
@@ -191,25 +210,27 @@ try {
             finalFilename = `${baseFilename}.mp3`;
             const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
 
-            await ytdlp.exec(url, {
-                ...commonYtdlpOptions,
-                extractAudio: true,
-                audioFormat: 'mp3',
-                audioQuality: 0, // 0 is best
-                output: finalFilepath,
-            });
+            await runYtDlp([
+                url,
+                ...commonYtdlpArgs,
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '0',
+                '-o', finalFilepath,
+            ]);
 
         } else if (type === 'mp4') {
             const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
             finalFilename = `${baseFilename}.mp4`;
             const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
 
-            await ytdlp.exec(url, {
-                ...commonYtdlpOptions,
-                format: `bestvideo[height<=${parseInt(quality)}]+bestaudio/best[height<=${parseInt(quality)}]/best`,
-                output: finalFilepath,
-                recodeVideo: 'mp4' // Ensure final container is mp4
-            });
+            await runYtDlp([
+                url,
+                ...commonYtdlpArgs,
+                '--format', `bestvideo[height<=${parseInt(quality)}]+bestaudio/best[height<=${parseInt(quality)}]/best`,
+                '-o', finalFilepath,
+                '--recode-video', 'mp4',
+            ]);
         } else {
              throw new Error(`Unsupported content type: ${type}`);
         }
