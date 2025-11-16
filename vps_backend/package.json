@@ -1,14 +1,13 @@
 {
   "name": "vps-backend",
   "version": "1.0.0",
-  "description": "Backend processing server for JusDown.",
+  "description": "A new, reliable backend for JusDown.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "ffmpeg-static": "^5.2.0",
     "axios": "^1.7.2",
     "uuid": "8.3.2",
     "archiver": "^5.3.1",

@@ -4,29 +4,25 @@ try {
     const path = require('path');
     const fs = require('fs');
     const { v4: uuidv4 } = require('uuid');
-    const { exec, spawn } = require('child_process');
-    const ffmpeg = require('ffmpeg-static');
+    const { spawn } = require('child_process');
     const axios = require('axios');
     const archiver = require('archiver');
 
-    // --- FINAL Correct wrapper to force use of system yt-dlp binary ---
+    // --- Configuration ---
+    const app = express();
+    const PORT = process.env.PORT || 5002;
+    const API_KEY = process.env.API_KEY; // For security
+    const BASE_URL = process.env.BASE_URL;
     const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
 
-    // A new, reliable Promise-based wrapper for yt-dlp using spawn
+    // --- Reliable yt-dlp Runner ---
     const runYtDlp = (args) => {
         return new Promise((resolve, reject) => {
             const ytdlpProcess = spawn(YTDLP_BINARY_PATH, args);
             let stdout = '';
             let stderr = '';
-
-            ytdlpProcess.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            ytdlpProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
+            ytdlpProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+            ytdlpProcess.stderr.on('data', (data) => { stderr += data.toString(); });
             ytdlpProcess.on('close', (code) => {
                 if (code === 0) {
                     resolve(stdout);
@@ -36,69 +32,35 @@ try {
                     reject(error);
                 }
             });
-
-             ytdlpProcess.on('error', (err) => {
-                reject(err);
-            });
+            ytdlpProcess.on('error', (err) => reject(err));
         });
     };
 
-
-    const app = express();
-    const PORT = process.env.PORT || 5002;
-    const API_KEY = process.env.API_KEY;
-    const BASE_URL = process.env.BASE_URL;
-
-    // --- Setup Directories & Force Download Middleware ---
+    // --- Setup Directories ---
     const DOWNLOAD_DIR = path.join(__dirname, 'public_downloads');
     if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
-
-    app.use('/downloads', (req, res, next) => {
-        res.setHeader('Content-Disposition', 'attachment');
-        express.static(DOWNLOAD_DIR)(req, res, next);
-    });
-
-    const TEMP_DIR = path.join(__dirname, 'temp_processing');
-    if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+    app.use('/downloads', express.static(DOWNLOAD_DIR));
 
     app.use(express.json());
 
-    // --- Job Queue ---
-    const jobQueue = [];
-    const jobStatus = {};
-    let activeJobs = 0;
-    const MAX_CONCURRENT_JOBS = 2;
-
-    async function processQueue() {
-        if (activeJobs >= MAX_CONCURRENT_JOBS || jobQueue.length === 0) return;
-        activeJobs++;
-        const task = jobQueue.shift();
-        try {
-            jobStatus[task.jobId] = { status: 'processing' };
-            const result = await processDownload(task);
-            jobStatus[task.jobId] = { status: 'completed', url: result.url };
-        } catch (error) {
-            console.error(`[Job ${task.jobId}] Processing failed:`, error.message, error.stderr || '');
-            const stderr = String(error.stderr || '').toLowerCase();
-            let userError = 'Processing failed. Please try a different link.';
-            if (stderr.includes('login required') || stderr.includes('registered users') || stderr.includes('account credentials')) {
-                userError = 'This content is private or requires a login to access.';
-            } else if(error.message.includes('No downloadable media found')) {
-                userError = error.message;
-            }
-            jobStatus[task.jobId] = { status: 'failed', error: userError };
-        } finally {
-            activeJobs--;
-            processQueue();
+    // --- Security Middleware ---
+    const apiKeyMiddleware = (req, res, next) => {
+        const providedKey = req.headers['x-api-key'];
+        if (!API_KEY || providedKey !== API_KEY) {
+            return res.status(401).json({ error: 'Unauthorized' });
         }
-    }
+        next();
+    };
 
-    // --- Caching & Cleanup ---
+    // --- Job Management ---
+    const jobStatus = {};
+
+    // --- Caching ---
     const cache = {};
     setInterval(() => {
         const now = Date.now();
         for (const key in cache) {
-            if (now - cache[key].timestamp > 60 * 60 * 1000) {
+            if (now - cache[key].timestamp > 60 * 60 * 1000) { // 1-hour cache
                 const filePath = path.join(DOWNLOAD_DIR, cache[key].filename);
                 fs.unlink(filePath, (err) => {
                     if (err) console.error(`Error deleting cached file: ${err}`);
@@ -109,164 +71,105 @@ try {
     }, 5 * 60 * 1000);
 
     function formatFilename({ title, type, quality }) {
-        const safeTitle = (title || `download_${uuidv4()}`)
-            .replace(/[<>:"/\\|?*]/g, '_')
-            .substring(0, 50);
-
+        const safeTitle = (title || `download_${uuidv4()}`).replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
         let qualityString = '';
-        if (type === 'mp3') {
-            qualityString = `${quality}kbps`;
-        } else if (type === 'mp4') {
-            qualityString = `${quality}p`;
-        }
-
+        if (type === 'mp3' && quality) qualityString = `${quality}kbps`;
+        if (type === 'mp4' && quality) qualityString = `${quality}p`;
         const typeString = type.toUpperCase();
-
-        const finalTitle = qualityString ?
-            `JusDown - ${safeTitle} - ${typeString} | ${qualityString}` :
-            `JusDown - ${safeTitle} - ${typeString}`;
-
-        return finalTitle;
+        return qualityString ? `JusDown - ${safeTitle} - ${typeString} | ${qualityString}` : `JusDown - ${safeTitle} - ${typeString}`;
     }
 
-    // --- FINAL, REWRITTEN & RELIABLE CORE LOGIC ---
-    async function processDownload({ url, quality, type, platform }) {
+    // --- Core Download Logic ---
+    async function processDownload({ url, quality, type }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            console.log(`[Cache HIT] Returning for: ${url}`);
-            const cachedUrl = new URL(path.join('downloads', cache[cacheKey].filename), BASE_URL).toString();
-            return { url: cachedUrl };
+            console.log(`[Cache HIT] for: ${url}`);
+            return new URL(path.join('downloads', cache[cacheKey].filename), BASE_URL).toString();
         }
-        console.log(`[Cache MISS] Starting new download for: ${url}`);
+        console.log(`[Cache MISS] for: ${url}`);
 
-        const commonYtdlpArgs = [
-            '--no-check-certificate',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            '--referer', 'https://www.google.com/',
-        ];
+        const commonArgs = ['--no-check-certificate', '--user-agent', 'Mozilla/5.0', '--referer', 'https://www.google.com/'];
 
-        // 1. Get Metadata first
-        const metadataJson = await runYtDlp([
-            url,
-            ...commonYtdlpArgs,
-            '--dump-single-json',
-            '--ignore-errors',
-        ]);
-
+        const metadataJson = await runYtDlp([url, ...commonArgs, '--dump-single-json', '--ignore-errors']);
         let metadata;
         try {
             metadata = JSON.parse(metadataJson);
         } catch (e) {
-             throw new Error('Could not retrieve valid media information from the link.');
+            throw new Error('Could not retrieve valid media information.');
         }
 
         if (!metadata || Object.keys(metadata).length === 0) {
-            throw new Error('Could not retrieve any media information from the link.');
+            throw new Error('No media information found at the provided link.');
         }
 
         const rawTitle = metadata.title || `download_${uuidv4()}`;
         let finalFilename;
 
-        // 2. Handle download based on type
-        if (metadata.entries) {
-            const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
-            finalFilename = `${baseFilename}.zip`;
+        if (metadata.entries) { // Gallery/Carousel post
+            finalFilename = `${formatFilename({ title: rawTitle, type: 'Gallery' })}.zip`;
             const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
-            const output = fs.createWriteStream(zipFilePath);
-            const archive = archiver('zip', { zlib: { level: 9 } });
-            archive.pipe(output);
+            const archive = archiver('zip');
+            archive.pipe(fs.createWriteStream(zipFilePath));
             for (let i = 0; i < metadata.entries.length; i++) {
                 const entry = metadata.entries[i];
                 const mediaUrl = entry.url || entry.formats?.find(f => f.url)?.url;
                 if (!mediaUrl) continue;
                 try {
-                    const fileResponse = await axios({ url: mediaUrl, responseType: 'stream' });
-                    const extension = path.extname(new URL(mediaUrl).pathname) || (entry.acodec !== 'none' ? '.mp3' : '.jpg');
-                    archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
+                    const res = await axios({ url: mediaUrl, responseType: 'stream' });
+                    const ext = path.extname(new URL(mediaUrl).pathname) || '.jpg';
+                    archive.append(res.data, { name: `${rawTitle}_${i + 1}${ext}` });
                 } catch (e) {
-                    console.error(`Skipping gallery entry ${i+1} due to error:`, e.message);
+                    console.error(`Skipping gallery item ${i+1}: ${e.message}`);
                 }
             }
             await archive.finalize();
         } else if (type === 'image') {
             const imageUrl = metadata.thumbnail;
             if (!imageUrl) throw new Error('No downloadable image found.');
-
-            const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
-            const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
-            finalFilename = `${baseFilename}${extension}`;
+            finalFilename = `${formatFilename({ title: rawTitle, type: 'Image' })}${path.extname(new URL(imageUrl).pathname) || '.jpg'}`;
             const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-
-            const response = await axios({ url: imageUrl, responseType: 'stream' });
-            const writer = fs.createWriteStream(finalFilepath);
-            response.data.pipe(writer);
-            await new Promise((resolve, reject) => {
-                writer.on('finish', resolve);
-                writer.on('error', reject);
-            });
-
+            const res = await axios({ url: imageUrl, responseType: 'stream' });
+            res.data.pipe(fs.createWriteStream(finalFilepath));
+            await new Promise((resolve, reject) => res.data.on('end', resolve).on('error', reject));
         } else if (type === 'mp3') {
-            const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
-            finalFilename = `${baseFilename}.mp3`;
-            const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-
-            await runYtDlp([
-                url,
-                ...commonYtdlpArgs,
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '0',
-                '-o', finalFilepath,
-            ]);
-
+            finalFilename = `${formatFilename({ title: rawTitle, type: 'MP3', quality })}.mp3`;
+            await runYtDlp([url, ...commonArgs, '--extract-audio', '--audio-format', 'mp3', '-o', path.join(DOWNLOAD_DIR, finalFilename)]);
         } else if (type === 'mp4') {
-            const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
-            finalFilename = `${baseFilename}.mp4`;
-            const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-
-            await runYtDlp([
-                url,
-                ...commonYtdlpArgs,
-                '--format', `bestvideo[height<=${parseInt(quality)}]+bestaudio/best[height<=${parseInt(quality)}]/best`,
-                '-o', finalFilepath,
-                '--recode-video', 'mp4',
-            ]);
+            finalFilename = `${formatFilename({ title: rawTitle, type: 'MP4', quality })}.mp4`;
+            const format = `bestvideo[height<=${parseInt(quality)}]+bestaudio/best[height<=${parseInt(quality)}]/best`;
+            await runYtDlp([url, ...commonArgs, '--format', format, '-o', path.join(DOWNLOAD_DIR, finalFilename), '--recode-video', 'mp4']);
         } else {
-             throw new Error(`Unsupported content type: ${type}`);
+            throw new Error(`Unsupported type: ${type}`);
         }
 
-        // 3. Cache and return the absolute URL
         cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
-        const finalUrl = new URL(path.join('downloads', finalFilename), BASE_URL).toString();
-        return { url: finalUrl };
+        return new URL(path.join('downloads', finalFilename), BASE_URL).toString();
     }
 
-
     // --- API Endpoints ---
-    app.post('/start-download', (req, res) => {
-        const { url, quality, type, platform } = req.body;
-        if (!url || !quality || !type || !platform) return res.status(400).json({ error: 'Missing parameters' });
-
-        const cacheKey = `${url}|${quality}|${type}`;
-        if (cache[cacheKey]) {
-            const cachedUrl = new URL(path.join('downloads', cache[cacheKey].filename), BASE_URL).toString();
-            return res.json({ jobId: null, status: 'completed', url: cachedUrl });
-        }
+    app.post('/start-download', apiKeyMiddleware, async (req, res) => {
+        const { url, quality, type } = req.body;
+        if (!url || !type) return res.status(400).json({ error: 'Missing parameters' });
 
         const jobId = uuidv4();
         jobStatus[jobId] = { status: 'queued' };
-        jobQueue.push({ jobId, url, quality, type, platform });
-        processQueue();
         res.json({ jobId });
+
+        try {
+            const downloadUrl = await processDownload({ url, quality, type });
+            jobStatus[jobId] = { status: 'completed', url: downloadUrl };
+        } catch (error) {
+            console.error(`[Job ${jobId}] Failed:`, error.message, error.stderr || '');
+            const stderr = String(error.stderr || '').toLowerCase();
+            let userError = 'Processing failed. The link may be invalid or private.';
+            if (stderr.includes('login required')) userError = 'This content is private or requires a login.';
+            jobStatus[jobId] = { status: 'failed', error: userError };
+        }
     });
 
     app.get('/status/:jobId', (req, res) => {
-        const { jobId } = req.params;
-        const status = jobStatus[jobId];
-        if (!status) return res.status(404).json({ error: 'Job not found' });
-        if (status.status === 'completed' || status.status === 'failed') {
-             setTimeout(() => delete jobStatus[jobId], 5 * 60 * 1000);
-        }
+        const status = jobStatus[req.params.jobId];
+        if (!status) return res.status(404).json({ error: 'Job not found.' });
         res.json(status);
     });
 
@@ -276,5 +179,5 @@ try {
     });
 
 } catch (e) {
-    console.error("Fatal error during server initialization:", e);
+    console.error("Fatal server error:", e);
 }
