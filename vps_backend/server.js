@@ -124,35 +124,28 @@ try {
             referer: 'https://www.google.com/',
         };
 
-        let metadata;
-        try {
-            metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
-        } catch (error) {
-            const stderr = error.stderr || '';
-            const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post') || stderr.includes('Requested format is not available');
+        // --- FINAL FIX: Use a single, reliable call to get metadata ---
+        const metadata = await ytdlp(url, {
+            ...commonYtdlpOptions,
+            dumpSingleJson: true,
+            ignoreErrors: true, // Prevent yt-dlp from exiting with an error for non-video posts
+        });
 
-            if (type === 'image' && isNoVideoError) {
-                console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
-                try {
-                    // FIX: Don't get title for images, as it can fail. Get only the thumbnail.
-                    const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
-                    const thumbnailUrl = String(thumbnailOutput.stdout || '').trim().split('\n')[0];
-                    if (!thumbnailUrl) throw new Error('Could not extract thumbnail URL.');
+        // --- Intelligently handle the output ---
+        const hasVideo = metadata && (metadata.formats || metadata.url);
+        const hasThumbnail = metadata && metadata.thumbnail;
 
-                    metadata = {
-                        title: `image_download_${uuidv4()}`, // Use a generic title
-                        thumbnail: thumbnailUrl,
-                    };
-                } catch (fallbackError) {
-                    cleanup();
-                    console.error(`[Image Fallback] FAILED for ${url}:`, JSON.stringify(fallbackError, null, 2));
-                    throw fallbackError;
-                }
-            } else {
-                cleanup();
-                console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
-                throw error;
+        if (type === 'image' && !hasVideo && hasThumbnail) {
+            console.log(`[Image Download] No video found, but thumbnail is available for ${url}.`);
+            // The existing image download logic later on will automatically use the thumbnail.
+            // We just need to ensure the title is generic for these cases.
+            if (!metadata.title) {
+                metadata.title = `image_download_${uuidv4()}`;
             }
+        } else if (!hasVideo) {
+            // If the user wanted a video/mp3 but there isn't one, or if there's no media at all.
+            cleanup();
+            throw new Error('No downloadable media found on this page.');
         }
 
         try {
