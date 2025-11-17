@@ -1,10 +1,10 @@
-# JusDown New Downloader Setup Guide (v2)
+# JusDown VPS Backend Setup Guide (v3 - Playwright)
 
-This guide will walk you through setting up the new, multi-library JusDown backend on a fresh Ubuntu VPS. This version does **not** use the system `yt-dlp`.
+This guide will walk you through setting up the new, modern JusDown backend on a fresh Ubuntu VPS. This version uses Node.js v20 and Playwright.
 
 ### Step 1: Log in to Your VPS
 
-Connect to your server using SSH.
+Connect to your server using SSH. Replace `your_vps_ip` with your server's IP address.
 ```bash
 ssh root@your_vps_ip
 ```
@@ -19,8 +19,8 @@ sudo apt-get update
 # Install git
 sudo apt-get install -y git
 
-# Install Node.js (Version 18.x is recommended)
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Install Node.js v20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # Install PM2 (a process manager to keep your server running)
@@ -36,16 +36,24 @@ git clone https://github.com/aasheesh333/MyProjects.git
 
 ### Step 4: Set Up the Backend
 
-Go into the backend folder and install the new libraries.
+Go into the backend folder and install the dependencies.
 ```bash
 # Go into the project directory
 cd MyProjects/vps_backend
 
-# Install all the required packages
+# Install all the required packages (npm, playwright, etc.)
 npm install
 ```
 
-### Step 5: Configure Your Environment
+### Step 5: Install Browser Dependencies for Playwright
+
+This is a **critical** step. Playwright needs to download a headless browser and its system dependencies to work correctly.
+```bash
+# This command can take a few minutes. Do not skip it.
+npx playwright install --with-deps
+```
+
+### Step 6: Configure Your Environment
 
 Create a `.env` file for your secrets.
 ```bash
@@ -67,14 +75,14 @@ PORT=5002
 ```
 To save the file in `nano`, press `Ctrl+X`, then `Y`, then `Enter`.
 
-### Step 6: Start the Backend Server with PM2
+### Step 7: Start the Backend Server with PM2
 
 Start the server using `pm2`.
 ```bash
-pm2 start server.js --name jusdown-backend
+pm2 start server.js --name jusdown-backend-v2
 ```
 
-### Step 7: Save the PM2 Process
+### Step 8: Save the PM2 Process
 
 This ensures your backend starts automatically if the VPS reboots.
 ```bash
@@ -83,6 +91,6 @@ pm2 save
 
 **Setup Complete!**
 
-Your new backend is now running. You can check its status with `pm2 status` or view its logs with `pm2 logs jusdown-backend`.
+Your new backend is now running. You can check its status with `pm2 status` or view its logs with `pm2 logs jusdown-backend-v2`.
 
-**Important:** Remember to update the `.env` file on your **frontend** server (on Render.com) to match the `API_KEY` and `BACKEND_URL` you chose here. The `BACKEND_URL` should be the same as your `BASE_URL`.
+**Important:** Remember to update the `.env` file on your **frontend** server to use the new `API_KEY` and set the `BACKEND_URL` to the `BASE_URL` you configured here.

@@ -1,21 +1,22 @@
 {
-  "name": "vps-backend-new",
-  "version": "1.0.0",
-  "description": "A new, multi-library backend for JusDown.",
+  "name": "jusdown-vps-backend",
+  "version": "2.0.0",
+  "description": "A modern, robust downloader backend built with Playwright and Node.js 20+.",
   "main": "server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.7.2",
-    "uuid": "8.3.2",
-    "archiver": "^5.3.1",
-    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.44.1",
     "youtubei.js": "^7.0.0",
-    "priyansh-ig-downloader": "^2.0.4",
-    "fb-downloader": "^1.0.2",
-    "pinterest-dl": "^1.0.1",
-    "ffmpeg-static": "^5.2.0"
+    "fluent-ffmpeg": "^2.1.3",
+    "ffmpeg-static": "^5.2.0",
+    "uuid": "^9.0.1"
   }
 }
