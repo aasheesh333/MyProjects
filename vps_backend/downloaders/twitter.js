@@ -4,55 +4,53 @@ import * as cheerio from 'cheerio';
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 const PLATFORM_IDENTIFIER = 'twitter';
 
-/**
- * The main download function for Twitter (X).
- * @param {object} options - The options for the download.
- * @param {string} options.url - The URL of the tweet.
- * @param {string} options.contentType - The desired content type ('mp4', 'image').
- * @returns {Promise<object>} - A promise that resolves to the standardized success or error object.
- */
-export async function download({ url, contentType }) {
+export async function download({ url, contentType, quality }) {
     try {
-        // Twitter scraping is very difficult. A common workaround is to use a "fix-up" embed service
-        // that renders the tweet with clean Open Graph tags. Example: vxtwitter.com, fxtwitter.com
-        const embedUrl = url.replace('twitter.com', 'fxtwitter.com').replace('x.com', 'fxtwitter.com');
-
-        const response = await axios.get(embedUrl, { headers: { 'User-Agent': USER_AGENT } });
-        const html = response.data;
+        const { data: html } = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
         const $ = cheerio.load(html);
 
-        const videoUrl = $('meta[property="og:video"]').attr('content');
-        const imageUrl = $('meta[property="og:image"]').attr('content');
-        const titleText = $('meta[property="og:description"]').attr('content') || 'Twitter Content';
-        const title = titleText.split('\\n')[0]; // Get the first line of the tweet text
-        const thumbnail = imageUrl;
-
-        let downloadUrl;
-        let mimeType;
-        let finalContentType = contentType;
-
-        if (contentType === 'mp4' && videoUrl) {
-            downloadUrl = videoUrl;
-            mimeType = 'video/mp4';
-        } else if (contentType === 'image' && imageUrl) {
-            downloadUrl = imageUrl;
-            mimeType = 'image/jpeg';
+        const scriptTag = $('#__NEXT_DATA__').html();
+        if (!scriptTag) {
+            return { success: false, error: "Could not find Twitter's data script. The page structure may have changed or the tweet is protected.", platform: PLATFORM_IDENTIFIER };
         }
-        // Fallback logic
-        else if (videoUrl) {
-            downloadUrl = videoUrl;
-            mimeType = 'video/mp4';
+
+        const data = JSON.parse(scriptTag);
+        const tweetData = data.props.pageProps.trpcState.json.queries[0].state.data.tweetResult.result;
+
+        if (!tweetData || !tweetData.legacy) {
+            return { success: false, error: "Failed to find tweet data in the JSON structure.", platform: PLATFORM_IDENTIFIER };
+        }
+
+        const title = tweetData.legacy.full_text.split(' http')[0];
+        const media = tweetData.legacy.extended_entities?.media[0];
+
+        if (!media) {
+            return { success: false, error: "This tweet does not appear to contain any media.", platform: PLATFORM_IDENTIFIER };
+        }
+
+        const thumbnail = media.media_url_https;
+        let downloadUrl, finalContentType, mimeType, qualityLabel = 'default';
+
+        if (media.type === 'video' && media.video_info?.variants) {
+            const videoVariants = media.video_info.variants
+                .filter(v => v.content_type === 'video/mp4')
+                .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
+            if (videoVariants.length === 0) {
+                 return { success: false, error: "No MP4 video variants found.", platform: PLATFORM_IDENTIFIER };
+            }
+
+            downloadUrl = videoVariants[0].url;
             finalContentType = 'mp4';
-        } else if (imageUrl) {
-            downloadUrl = imageUrl;
-            mimeType = 'image/jpeg';
-            finalContentType = 'image';
-        } else {
-            throw new Error("Could not find any video or image. The tweet might be protected, deleted, or not contain media.");
-        }
+            mimeType = 'video/mp4';
+            qualityLabel = `${media.sizes.large.h}p`; // Approximate quality
 
-        if (!downloadUrl) {
-            throw new Error("Failed to extract the direct download URL.");
+        } else if (media.type === 'photo') {
+            downloadUrl = media.media_url_https;
+            finalContentType = 'image';
+            mimeType = 'image/jpeg';
+        } else {
+            return { success: false, error: "Unsupported media type found in tweet.", platform: PLATFORM_IDENTIFIER };
         }
 
         const filename = `${title.substring(0, 50)}.${finalContentType}`;
@@ -66,15 +64,9 @@ export async function download({ url, contentType }) {
             filename,
             mimeType,
             contentType: finalContentType,
-            quality: 'default',
+            quality: qualityLabel
         };
-
     } catch (error) {
-        console.error(`[${PLATFORM_IDENTIFIER}] Error downloading from ${url}:`, error.message);
-        return {
-            success: false,
-            platform: PLATFORM_IDENTIFIER,
-            error: error.message || "An unknown error occurred while processing the Twitter URL. This can happen if the tweet is private or deleted.",
-        };
+        return { success: false, error: "Failed to process Twitter URL. The tweet may be private, deleted, or its data structure has changed.", platform: PLATFORM_IDENTIFIER };
     }
 }

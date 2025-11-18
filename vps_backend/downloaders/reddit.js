@@ -1,69 +1,49 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 const PLATFORM_IDENTIFIER = 'reddit';
 
-/**
- * The main download function for Reddit.
- * @param {object} options - The options for the download.
- * @param {string} options.url - The URL of the Reddit post.
- * @param {string} options.contentType - The desired content type ('mp4', 'image').
- * @returns {Promise<object>} - A promise that resolves to the standardized success or error object.
- */
-export async function download({ url, contentType }) {
+export async function download({ url, contentType, quality }) {
     try {
-        const response = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
-        const html = response.data;
-        const $ = cheerio.load(html);
+        const jsonUrl = url.endsWith('.json') ? url : `${url}.json`;
+        const { data } = await axios.get(jsonUrl, { headers: { 'User-Agent': USER_AGENT } });
 
-        // Reddit embeds its data in a script tag with id 'data'
-        const scriptTag = $('#data').html();
-        if (!scriptTag) {
-            throw new Error("Could not find the Reddit data script tag. The page structure may have changed.");
-        }
-
-        const data = JSON.parse(scriptTag);
-        const post = data.posts.models[Object.keys(data.posts.models)[0]]; // Get the first (and usually only) post object
-
+        const post = data[0]?.data?.children[0]?.data;
         if (!post) {
-            throw new Error("Failed to find post data in the JSON structure.");
+            return { success: false, error: "Failed to find post data in the JSON response.", platform: PLATFORM_IDENTIFIER };
         }
 
         const title = post.title || 'Reddit Content';
-        const thumbnail = post.thumbnail.url;
+        const thumbnail = post.thumbnail || '';
 
-        let downloadUrl;
-        let mimeType;
-        let finalContentType = contentType;
+        let downloadUrl, finalContentType, mimeType, qualityLabel = 'default';
 
-        const isVideo = post.media && post.media.type === 'video';
-        const isImage = post.media && post.media.type === 'image';
+        const isVideo = post.is_video && post.media?.reddit_video?.fallback_url;
+        const isImage = post.url_overridden_by_dest && !post.is_self && !isVideo;
 
         if (contentType === 'mp4' && isVideo) {
-            downloadUrl = post.media.dashUrl.split('?')[0]; // Get the DASH URL without query params
-            mimeType = 'video/mp4';
-        } else if (contentType === 'image' && isImage) {
-            downloadUrl = post.media.content;
-            mimeType = 'image/jpeg'; // Assuming jpeg, adjust if needed
-        }
-        // Fallback logic
-        else if (isVideo) {
-            downloadUrl = post.media.dashUrl.split('?')[0];
-            mimeType = 'video/mp4';
+            downloadUrl = post.media.reddit_video.fallback_url;
             finalContentType = 'mp4';
-        } else if (isImage) {
-            downloadUrl = post.media.content;
-            mimeType = 'image/jpeg';
+            mimeType = 'video/mp4';
+            qualityLabel = `${post.media.reddit_video.height}p`;
+        } else if (contentType === 'image' && isImage) {
+            downloadUrl = post.url_overridden_by_dest;
             finalContentType = 'image';
+            mimeType = 'image/jpeg';
+        } else if (isVideo) { // Fallback
+            downloadUrl = post.media.reddit_video.fallback_url;
+            finalContentType = 'mp4';
+            mimeType = 'video/mp4';
+            qualityLabel = `${post.media.reddit_video.height}p`;
+        } else if (isImage) {
+            downloadUrl = post.url_overridden_by_dest;
+            finalContentType = 'image';
+            mimeType = 'image/jpeg';
         } else {
-            throw new Error("This Reddit post does not appear to contain a direct video or image.");
+            return { success: false, error: "This Reddit post does not contain a direct video or image link.", platform: PLATFORM_IDENTIFIER };
         }
 
-        if (!downloadUrl) {
-            throw new Error("Failed to extract the direct download URL from the Reddit data.");
-        }
-
+        downloadUrl = downloadUrl.split('?')[0];
         const filename = `${title.substring(0, 50)}.${finalContentType}`;
 
         return {
@@ -75,15 +55,9 @@ export async function download({ url, contentType }) {
             filename,
             mimeType,
             contentType: finalContentType,
-            quality: 'default',
+            quality: qualityLabel
         };
-
     } catch (error) {
-        console.error(`[${PLATFORM_IDENTIFIER}] Error downloading from ${url}:`, error.message);
-        return {
-            success: false,
-            platform: PLATFORM_IDENTIFIER,
-            error: error.message || "An unknown error occurred while processing the Reddit URL.",
-        };
+        return { success: false, error: "Failed to process Reddit URL. The post may be private or deleted.", platform: PLATFORM_IDENTIFIER };
     }
 }

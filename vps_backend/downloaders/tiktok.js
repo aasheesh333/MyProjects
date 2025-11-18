@@ -4,48 +4,31 @@ import * as cheerio from 'cheerio';
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 const PLATFORM_IDENTIFIER = 'tiktok';
 
-/**
- * The main download function for TikTok.
- * @param {object} options - The options for the download.
- * @param {string} options.url - The URL of the TikTok video.
- * @param {string} options.contentType - The desired content type ('mp4').
- * @returns {Promise<object>} - A promise that resolves to the standardized success or error object.
- */
-export async function download({ url, contentType }) {
+export async function download({ url, contentType, quality }) {
     try {
         if (contentType !== 'mp4') {
-            throw new Error(`TikTok downloader only supports 'mp4', not '${contentType}'.`);
+            return { success: false, error: `TikTok downloader only supports 'mp4', not '${contentType}'.`, platform: PLATFORM_IDENTIFIER };
         }
 
-        const response = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
-        const html = response.data;
+        const { data: html } = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
         const $ = cheerio.load(html);
 
-        // TikTok embeds a JSON object with all the data in a script tag with id '__UNIVERSAL_DATA_FOR_REHYDRATION__'
         const scriptTag = $('#__UNIVERSAL_DATA_FOR_REHYDRATION__').html();
         if (!scriptTag) {
-            throw new Error("Could not find the TikTok data script tag. The page structure may have changed.");
+            return { success: false, error: "Could not find TikTok data script. The page structure may have changed.", platform: PLATFORM_IDENTIFIER };
         }
 
         const data = JSON.parse(scriptTag);
-
-        // Navigate through the complex JSON object to find the video data
         const videoData = data['__DEFAULT_SCOPE__']['webapp.video-detail']['itemInfo']['itemStruct'];
 
         if (!videoData || !videoData.video || !videoData.video.playAddr) {
-            throw new Error("Failed to find video data in the JSON structure.");
+            return { success: false, error: "Failed to find video data in the page's JSON structure.", platform: PLATFORM_IDENTIFIER };
         }
 
         const downloadUrl = videoData.video.playAddr;
         const title = videoData.desc || 'TikTok Video';
         const thumbnail = videoData.video.cover;
-
-        if (!downloadUrl) {
-            throw new Error("Failed to extract the direct download URL from the TikTok data.");
-        }
-
         const filename = `${title.substring(0, 50)}.mp4`;
-        const mimeType = 'video/mp4';
 
         return {
             success: true,
@@ -54,17 +37,11 @@ export async function download({ url, contentType }) {
             thumbnail,
             downloadUrl,
             filename,
-            mimeType,
+            mimeType: 'video/mp4',
             contentType: 'mp4',
-            quality: 'default',
+            quality: `${videoData.video.height}p` || 'default'
         };
-
     } catch (error) {
-        console.error(`[${PLATFORM_IDENTIFIER}] Error downloading from ${url}:`, error.message);
-        return {
-            success: false,
-            platform: PLATFORM_IDENTIFIER,
-            error: error.message || "An unknown error occurred while processing the TikTok URL.",
-        };
+        return { success: false, error: error.message, platform: PLATFORM_IDENTIFIER };
     }
 }

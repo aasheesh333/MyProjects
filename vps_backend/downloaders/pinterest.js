@@ -4,68 +4,47 @@ import * as cheerio from 'cheerio';
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 const PLATFORM_IDENTIFIER = 'pinterest';
 
-/**
- * The main download function for Pinterest.
- * @param {object} options - The options for the download.
- * @param {string} options.url - The URL of the Pinterest pin.
- * @param {string} options.contentType - The desired content type ('mp4', 'image').
- * @returns {Promise<object>} - A promise that resolves to the standardized success or error object.
- */
-export async function download({ url, contentType }) {
+export async function download({ url, contentType, quality }) {
     try {
-        const response = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
-        const html = response.data;
+        const { data: html } = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
         const $ = cheerio.load(html);
 
-        // Pinterest embeds data in a script tag with id '__PINTEREST_INITIAL_STATE__'
         const scriptTag = $('#__PINTEREST_INITIAL_STATE__').html();
         if (!scriptTag) {
-            throw new Error("Could not find the Pinterest data script tag. The page structure may have changed.");
+            return { success: false, error: "Could not find Pinterest data script. The page structure may have changed.", platform: PLATFORM_IDENTIFIER };
         }
 
         const data = JSON.parse(scriptTag);
-
-        // The exact path to the media can be complex and may change. This is a common structure.
         const pinData = Object.values(data.resources.PinResource || {})[0]?.data;
-
         if (!pinData) {
-            throw new Error("Failed to find pin data in the JSON structure.");
+            return { success: false, error: "Failed to find pin data in the JSON structure.", platform: PLATFORM_IDENTIFIER };
         }
 
         const title = pinData.title || pinData.description || 'Pinterest Content';
         const thumbnail = pinData.images?.['736x']?.url || Object.values(pinData.images || {})[0]?.url;
-
-        let downloadUrl;
-        let mimeType;
-        let finalContentType;
-
         const videoUrl = pinData.videos?.video_list?.V_720P?.url;
         const imageUrl = pinData.images?.['originals']?.url || thumbnail;
 
+        let downloadUrl, finalContentType, mimeType;
+
         if (contentType === 'mp4' && videoUrl) {
             downloadUrl = videoUrl;
-            mimeType = 'video/mp4';
             finalContentType = 'mp4';
+            mimeType = 'video/mp4';
         } else if (contentType === 'image' && imageUrl) {
             downloadUrl = imageUrl;
-            mimeType = 'image/jpeg';
             finalContentType = 'image';
-        }
-        // Fallback logic
-        else if (videoUrl) {
+            mimeType = 'image/jpeg';
+        } else if (videoUrl) { // Fallback
             downloadUrl = videoUrl;
-            mimeType = 'video/mp4';
             finalContentType = 'mp4';
+            mimeType = 'video/mp4';
         } else if (imageUrl) {
             downloadUrl = imageUrl;
-            mimeType = 'image/jpeg';
             finalContentType = 'image';
+            mimeType = 'image/jpeg';
         } else {
-            throw new Error("Could not find any downloadable video or image for this pin.");
-        }
-
-        if (!downloadUrl) {
-            throw new Error("Failed to extract the direct download URL from the Pinterest data.");
+            return { success: false, error: "No downloadable video or image found for this pin.", platform: PLATFORM_IDENTIFIER };
         }
 
         const filename = `${title.substring(0, 50)}.${finalContentType}`;
@@ -79,15 +58,9 @@ export async function download({ url, contentType }) {
             filename,
             mimeType,
             contentType: finalContentType,
-            quality: 'default',
+            quality: '720p' // Assuming 720p from the videoUrl key
         };
-
     } catch (error) {
-        console.error(`[${PLATFORM_IDENTIFIER}] Error downloading from ${url}:`, error.message);
-        return {
-            success: false,
-            platform: PLATFORM_IDENTIFIER,
-            error: error.message || "An unknown error occurred while processing the Pinterest URL.",
-        };
+        return { success: false, error: error.message, platform: PLATFORM_IDENTIFIER };
     }
 }
