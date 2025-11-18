@@ -1,7 +1,7 @@
 {
   "name": "jusdown-vps-backend",
-  "version": "2.0.0",
-  "description": "A modern, robust downloader backend built with Playwright and Node.js 20+.",
+  "version": "2.1.0",
+  "description": "Production-ready downloader backend with Playwright and Node.js 20+.",
   "main": "server.js",
   "type": "module",
   "engines": {
@@ -16,7 +16,9 @@
     "playwright": "^1.44.1",
     "youtubei.js": "^7.0.0",
     "fluent-ffmpeg": "^2.1.3",
-    "ffmpeg-static": "^5.2.0",
-    "uuid": "^9.0.1"
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "uuid": "^9.0.1",
+    "axios": "^1.7.2",
+    "archiver": "^7.0.1"
   }
 }

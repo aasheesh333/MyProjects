@@ -1,33 +1,29 @@
 import ffmpeg from 'fluent-ffmpeg';
-import ffmpegStatic from 'ffmpeg-static';
-import fs from 'fs';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
-ffmpeg.setFfmpegPath(ffmpegStatic);
+// Point fluent-ffmpeg to the installed ffmpeg executable
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 /**
- * Converts a video file to MP3 format.
- * @param {string} inputPath - The path to the input video file.
- * @param {string} outputPath - The path to save the output MP3 file.
- * @returns {Promise<void>}
+ * Converts a video file to an MP3 file.
+ * @param {string} inputPath - The full path to the input video file.
+ * @param {string} outputPath - The full path where the output MP3 file will be saved.
+ * @returns {Promise<void>} - A promise that resolves when the conversion is complete.
  */
-export const convertToMp3 = (inputPath, outputPath) => {
+export function convertToMp3(inputPath, outputPath) {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
-            .audioBitrate('128k')
-            .toFormat('mp3')
+            .noVideo() // Remove the video stream
+            .audioCodec('libmp3lame') // Use the LAME MP3 codec
+            .audioBitrate('128k') // Set bitrate to 128kbps
             .on('end', () => {
-                // Clean up the temporary input file
-                fs.unlink(inputPath, (err) => {
-                    if (err) console.error('Error deleting temp file:', err);
-                });
+                console.log(`[FFmpeg] Successfully converted ${inputPath} to MP3.`);
                 resolve();
             })
             .on('error', (err) => {
-                console.error('ffmpeg error:', err);
-                // Clean up the temporary input file on error
-                fs.unlink(inputPath, () => {});
-                reject(new Error('Failed to convert file to MP3.'));
+                console.error(`[FFmpeg] Error converting ${inputPath}:`, err.message);
+                reject(new Error(`FFmpeg conversion failed: ${err.message}`));
             })
             .save(outputPath);
     });
-};
+}
