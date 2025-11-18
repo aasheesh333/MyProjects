@@ -2,29 +2,19 @@ import 'dotenv/config';
 import express from 'express';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import fs from 'fs';
+import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 
-// --- Downloader Modules ---
-import { getBrowser, closeBrowser } from './playwright_engine.js';
-import { downloadInstagram } from './downloaders/instagram_downloader.js';
-import { downloadYouTube } from './downloaders/youtube_downloader.js';
-import { downloadFacebook } from './downloaders/facebook_downloader.js';
-import { downloadPinterest } from './downloaders/pinterest_downloader.js';
-import { downloadTikTok } from './downloaders/tiktok_downloader.js';
-
-// --- Configuration ---
+// --- Server Configuration ---
 const app = express();
 const PORT = process.env.PORT || 5002;
 const API_KEY = process.env.API_KEY;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-export const DOWNLOAD_DIR = path.join(__dirname, 'public_downloads');
 
 // --- Middleware ---
 app.use(express.json());
-app.use('/downloads', express.static(DOWNLOAD_DIR));
 
 const apiKeyMiddleware = (req, res, next) => {
     const providedKey = req.headers['x-api-key'];
@@ -33,24 +23,49 @@ const apiKeyMiddleware = (req, res, next) => {
     }
     next();
 };
+
 app.use('/api', apiKeyMiddleware);
 
-// --- Stable Asynchronous Job Queue ---
+
+// --- Dynamic Platform Handler Loader ---
+const PLATFORM_HANDLERS = {};
+
+async function loadPlatformHandlers() {
+    const downloadersDir = path.join(__dirname, 'downloaders');
+    try {
+        const files = await fs.readdir(downloadersDir);
+        for (const file of files) {
+            // Ignore the template file and any non-JS files
+            if (file.startsWith('_') || !file.endsWith('.js')) {
+                continue;
+            }
+            const platformName = path.basename(file, '.js');
+            try {
+                const module = await import(`./downloaders/${file}`);
+                if (typeof module.download === 'function') {
+                    PLATFORM_HANDLERS[platformName] = module.download;
+                    console.log(`[Loader] Successfully loaded downloader for: ${platformName}`);
+                } else {
+                    console.warn(`[Loader] Warning: ${file} does not export a 'download' function.`);
+                }
+            } catch (err) {
+                console.error(`[Loader] Error loading downloader from ${file}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error('[Loader] Could not read downloaders directory:', err);
+        // If the directory doesn't exist, we can't continue.
+        process.exit(1);
+    }
+}
+
+
+// --- Asynchronous Job Queue ---
 const jobQueue = [];
 const jobStatus = {};
 let isProcessing = false;
 
-// --- Platform Handler Map ---
-const platformHandlers = {
-    instagram: downloadInstagram,
-    youtube: downloadYouTube,
-    facebook: downloadFacebook,
-    pinterest: downloadPinterest,
-    tiktok: downloadTikTok,
-};
-
-// --- Queue Processor ---
-const processQueue = async () => {
+async function processQueue() {
     if (isProcessing || jobQueue.length === 0) {
         return;
     }
@@ -58,41 +73,59 @@ const processQueue = async () => {
     const job = jobQueue.shift();
 
     try {
-        jobStatus[job.jobId] = { status: 'processing' };
+        jobStatus[job.jobId] = { status: 'processing', platform: job.platform };
 
-        const handler = platformHandlers[job.platform];
+        const handler = PLATFORM_HANDLERS[job.platform];
         if (!handler) {
-            throw new Error(`Platform '${job.platform}' is not supported.`);
+            throw new Error(`Platform '${job.platform}' is not supported or its module failed to load.`);
         }
 
-        const downloadUrl = await handler(job);
-        jobStatus[job.jobId] = { status: 'completed', url: downloadUrl };
+        const result = await handler({
+            url: job.url,
+            contentType: job.contentType,
+            quality: job.quality,
+        });
+
+        if (result.success) {
+            jobStatus[job.jobId] = { status: 'completed', result };
+        } else {
+            // Pass the specific error from the downloader
+            throw new Error(result.error || 'The downloader failed without a specific error message.');
+        }
 
     } catch (error) {
-        console.error(`[Job ${job.jobId}] Failed:`, error.message);
-        jobStatus[job.jobId] = { status: 'failed', error: error.message || 'An unknown error occurred.' };
+        console.error(`[Job ${job.jobId}] Failed for platform ${job.platform}:`, error.message);
+        jobStatus[job.jobId] = { status: 'failed', platform: job.platform, error: error.message };
     } finally {
         isProcessing = false;
-        // Immediately check for the next job
+        // Immediately try to process the next job
         process.nextTick(processQueue);
     }
-};
+}
 
-setInterval(processQueue, 3000); // Check the queue every 3 seconds
+// Check the queue every few seconds in case the event loop is empty
+setInterval(processQueue, 2000);
+
 
 // --- API Routes ---
 app.post('/api/v2/download', (req, res) => {
-    const { url, type, platform, quality } = req.body;
-    if (!url || !type || !platform) {
-        return res.status(400).json({ success: false, error: 'Missing required parameters: url, type, platform.' });
+    const { url, platform, contentType, quality } = req.body;
+
+    if (!url || !platform || !contentType) {
+        return res.status(400).json({ success: false, error: 'Missing required parameters: url, platform, contentType.' });
+    }
+
+    if (!PLATFORM_HANDLERS[platform]) {
+        return res.status(400).json({ success: false, error: `Platform '${platform}' is not supported.` });
     }
 
     const jobId = uuidv4();
-    jobStatus[jobId] = { status: 'queued' };
-    jobQueue.push({ jobId, url, type, platform, quality });
+    jobStatus[jobId] = { status: 'queued', platform };
+    jobQueue.push({ jobId, url, platform, contentType, quality });
 
     res.json({ success: true, jobId });
-    process.nextTick(processQueue); // Kick off the queue processor
+    // Give the queue an immediate nudge
+    process.nextTick(processQueue);
 });
 
 app.get('/api/v2/status/:jobId', (req, res) => {
@@ -103,25 +136,23 @@ app.get('/api/v2/status/:jobId', (req, res) => {
     res.json({ success: true, ...status });
 });
 
-// --- Server Startup & Shutdown ---
-const startServer = async () => {
-    if (!fs.existsSync(DOWNLOAD_DIR)) {
-        fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+
+// --- Server Startup ---
+async function startServer() {
+    await loadPlatformHandlers();
+
+    // Check if any handlers were loaded
+    if (Object.keys(PLATFORM_HANDLERS).length === 0) {
+        console.warn('Warning: No platform downloaders were loaded. The API will not be able to process any downloads.');
+        console.warn('Ensure the `vps_backend/downloaders/` directory exists and contains valid downloader files.');
     }
-    await getBrowser(); // Pre-warm the browser
 
     app.listen(PORT, () => {
-        console.log(`JusDown Backend v2.1 is running on http://localhost:${PORT}`);
+        console.log(`JusDown Backend v3.0 (Axios/Cheerio) is running on http://localhost:${PORT}`);
         if (!API_KEY) {
             console.warn('Warning: API_KEY is not set. The API is currently unsecured.');
         }
     });
-};
-
-process.on('SIGINT', async () => {
-    console.log('Shutting down server...');
-    await closeBrowser();
-    process.exit(0);
-});
+}
 
 startServer();
