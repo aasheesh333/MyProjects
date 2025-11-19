@@ -9,6 +9,7 @@ try {
     const ffmpeg = require('ffmpeg-static');
     const axios = require('axios');
     const archiver = require('archiver');
+    const instagramDownloader = require('./downloaders/instagram');
 
     const app = express();
     const PORT = process.env.PORT || 5002;
@@ -112,108 +113,139 @@ try {
         fs.mkdirSync(requestDir);
         const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
 
-        const commonYtdlpOptions = {
-            noCheckCertificate: true,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            referer: 'https://www.google.com/',
-        };
-
-        let metadata;
         try {
-            metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
-        } catch (error) {
-            const stderr = error.stderr || '';
-            const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
-
-            if (type === 'image' && isNoVideoError) {
-                console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
-                try {
-                    const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
-                    const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
-
-                    metadata = {
-                        title: titleOutput.stdout.trim(),
-                        thumbnail: thumbnailOutput.stdout.trim(),
-                    };
-                } catch (fallbackError) {
-                    cleanup();
-                    console.error(`[Image Fallback] FAILED for ${url}:`, JSON.stringify(fallbackError, null, 2));
-                    throw fallbackError;
+            if (platform === 'instagram') {
+                console.log(`[Instagram] Starting download for: ${url}`);
+                const result = await instagramDownloader.download(url);
+                if (!result.success) {
+                    throw new Error(result.error || 'Instagram download failed.');
                 }
-            } else {
+
+                let finalFilename;
+                if (result.type === 'gallery') {
+                    const baseFilename = formatFilename({ title: `${result.username}_${result.title}`, type: 'Gallery', quality: null });
+                    finalFilename = `${baseFilename}.zip`;
+                    const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
+                    const output = fs.createWriteStream(zipFilePath);
+                    const archive = archiver('zip', { zlib: { level: 9 } });
+                    archive.pipe(output);
+                    for (let i = 0; i < result.media.length; i++) {
+                        const mediaItem = result.media[i];
+                        const fileResponse = await axios({ url: mediaItem.url, responseType: 'stream' });
+                        const extension = mediaItem.type === 'video' ? '.mp4' : '.jpg';
+                        archive.append(fileResponse.data, { name: `${result.username}_${i + 1}${extension}` });
+                    }
+                    await archive.finalize();
+                } else {
+                    const mediaItem = result.media[0];
+                    if (mediaItem.type === 'video' && type === 'mp3') {
+                        const baseFilename = formatFilename({ title: `${result.username}_${result.title}`, type: 'MP3', quality: quality });
+                        finalFilename = `${baseFilename}.mp3`;
+                        const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                        const videoPath = path.join(requestDir, `video_source.mp4`);
+                        const videoStream = await axios({ method: 'get', url: mediaItem.url, responseType: 'stream' });
+                        const videoWriter = fs.createWriteStream(videoPath);
+                        videoStream.data.pipe(videoWriter);
+                        await new Promise((resolve, reject) => { videoWriter.on('finish', resolve); videoWriter.on('error', reject); });
+                        await new Promise((resolve, reject) => {
+                            exec(`"${ffmpeg}" -i "${videoPath}" -b:a ${quality}k "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
+                        });
+                    } else {
+                        const extension = mediaItem.type === 'video' ? '.mp4' : '.jpg';
+                        const baseFilename = formatFilename({ title: `${result.username}_${result.title}`, type: mediaItem.type.toUpperCase(), quality: null });
+                        finalFilename = `${baseFilename}${extension}`;
+                        const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                        const response = await axios({ url: mediaItem.url, responseType: 'stream' });
+                        const writer = fs.createWriteStream(finalFilepath);
+                        response.data.pipe(writer);
+                        await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+                    }
+                }
+                cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
                 cleanup();
-                console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
-                throw error;
-            }
-        }
+                return { url: `${BASE_URL}/downloads/${finalFilename}` };
+            } else {
+                // --- Fallback to yt-dlp for all other platforms ---
+                const commonYtdlpOptions = {
+                    noCheckCertificate: true,
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    referer: 'https://www.google.com/',
+                };
 
-        try {
-            const rawTitle = metadata.title;
-            let finalFilename;
-
-            if (metadata.entries && (type === 'image' || type === 'mp4' || type === 'mp3')) {
-                const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
-                finalFilename = `${baseFilename}.zip`;
-
-                const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
-                const output = fs.createWriteStream(zipFilePath);
-                const archive = archiver('zip', { zlib: { level: 9 } });
-                archive.pipe(output);
-                for (let i = 0; i < metadata.entries.length; i++) {
-                    const entry = metadata.entries[i];
-                    const mediaUrl = entry.url || entry.formats?.find(f => f.url)?.url;
-                    if (!mediaUrl) continue;
-                    const fileResponse = await axios({ url: mediaUrl, responseType: 'stream' });
-                    const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
-                    archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
+                let metadata;
+                try {
+                    metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
+                } catch (error) {
+                    const stderr = error.stderr || '';
+                    const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
+                    if (type === 'image' && isNoVideoError) {
+                        const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
+                        const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
+                        metadata = { title: titleOutput.stdout.trim(), thumbnail: thumbnailOutput.stdout.trim() };
+                    } else {
+                        throw error;
+                    }
                 }
-                await archive.finalize();
-            }
-            else if (type === 'image') {
-                const imageUrl = metadata.thumbnail || metadata.url;
-                if (!imageUrl) throw new Error('Could not find image URL.');
-                const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
-                const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
-                finalFilename = `${baseFilename}${extension}`;
-                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                const response = await axios({ url: imageUrl, responseType: 'stream' });
-                const writer = fs.createWriteStream(finalFilepath);
-                response.data.pipe(writer);
-                await new Promise((resolve, reject) => {
-                    writer.on('finish', resolve); writer.on('error', reject);
-                });
-            }
-            else {
-                if (type === 'mp3') {
-                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
-                    finalFilename = `${baseFilename}.mp3`;
+
+                const rawTitle = metadata.title;
+                let finalFilename;
+                if (metadata.entries && (type === 'image' || type === 'mp4' || type === 'mp3')) {
+                    const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
+                    finalFilename = `${baseFilename}.zip`;
+                    const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
+                    const output = fs.createWriteStream(zipFilePath);
+                    const archive = archiver('zip', { zlib: { level: 9 } });
+                    archive.pipe(output);
+                    for (let i = 0; i < metadata.entries.length; i++) {
+                        const entry = metadata.entries[i];
+                        const mediaUrl = entry.url || entry.formats?.find(f => f.url)?.url;
+                        if (!mediaUrl) continue;
+                        const fileResponse = await axios({ url: mediaUrl, responseType: 'stream' });
+                        const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
+                        archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
+                    }
+                    await archive.finalize();
+                } else if (type === 'image') {
+                    const imageUrl = metadata.thumbnail || metadata.url;
+                    if (!imageUrl) throw new Error('Could not find image URL.');
+                    const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
+                    const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
+                    finalFilename = `${baseFilename}${extension}`;
                     const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                    const audioUrl = metadata.url || (await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best' })).stdout.trim().split('\n')[0];
-                    if (!audioUrl) throw new Error('Could not retrieve valid audio URL.');
-                    const audioPath = path.join(requestDir, `audio_source`);
-                    const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
-                    const audioWriter = fs.createWriteStream(audioPath);
-                    audioStream.data.pipe(audioWriter);
-                    await new Promise((resolve, reject) => { audioWriter.on('finish', resolve); audioWriter.on('error', reject); });
-                    await new Promise((resolve, reject) => {
-                        exec(`"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
-                    });
-                } else { // MP4 logic
-                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
-                    finalFilename = `${baseFilename}.mp4`;
-                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                    const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
-                    await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
+                    const response = await axios({ url: imageUrl, responseType: 'stream' });
+                    const writer = fs.createWriteStream(finalFilepath);
+                    response.data.pipe(writer);
+                    await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+                } else {
+                    if (type === 'mp3') {
+                        const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
+                        finalFilename = `${baseFilename}.mp3`;
+                        const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                        const audioUrl = metadata.url || (await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best' })).stdout.trim().split('\n')[0];
+                        if (!audioUrl) throw new Error('Could not retrieve valid audio URL.');
+                        const audioPath = path.join(requestDir, `audio_source`);
+                        const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
+                        const audioWriter = fs.createWriteStream(audioPath);
+                        audioStream.data.pipe(audioWriter);
+                        await new Promise((resolve, reject) => { audioWriter.on('finish', resolve); audioWriter.on('error', reject); });
+                        await new Promise((resolve, reject) => {
+                            exec(`"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
+                        });
+                    } else { // MP4 logic
+                        const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
+                        finalFilename = `${baseFilename}.mp4`;
+                        const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                        const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
+                        await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
+                    }
                 }
+                cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
+                cleanup();
+                return { url: `${BASE_URL}/downloads/${finalFilename}` };
             }
-
-            cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
-            cleanup();
-            return { url: `${BASE_URL}/downloads/${finalFilename}` };
-
         } catch (error) {
             cleanup();
-            console.error(`Post-metadata processing failed for ${url}:`, JSON.stringify(error, null, 2));
+            console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
             throw error;
         }
     }
