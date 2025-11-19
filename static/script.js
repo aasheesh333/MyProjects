@@ -116,6 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function pollStatus(jobId) {
         pollInterval = setInterval(async () => {
             try {
+                // CORRECTED: Direct call to backend with API Key
                 const response = await fetch(`${CONFIG.backendUrl}/api/v2/status/${jobId}`, {
                     headers: { 'x-api-key': CONFIG.apiKey }
                 });
@@ -172,6 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const quality = qualitySelect.value;
             const type = typeSelect.value;
 
+            // CORRECTED: Direct call to backend with API Key
             const response = await fetch(`${CONFIG.backendUrl}/api/v2/download`, {
                 method: 'POST',
                 headers: {
