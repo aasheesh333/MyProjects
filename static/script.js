@@ -1,4 +1,7 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // --- Global Config ---
+    let CONFIG = {};
+
     // --- DOM Elements ---
     const platformSlider = document.querySelector('.platform-slider');
     const platformContainer = document.querySelector('.platform-selector-container');
@@ -37,6 +40,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedPlatform = 'youtube';
     let pollInterval;
 
+    // --- Config Fetch ---
+    async function fetchConfig() {
+        try {
+            const response = await fetch('/api/config');
+            if (!response.ok) throw new Error('Failed to load server configuration.');
+            CONFIG = await response.json();
+        } catch (error) {
+            console.error("CRITICAL ERROR:", error.message);
+            alert("Could not load backend configuration. The application will not work.");
+        }
+    }
+
     // --- UI Update Functions ---
     function updateUIForPlatform(platform) {
         selectedPlatform = platform;
@@ -55,19 +70,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         qualityGroup.style.display = config.quality ? 'block' : 'none';
-        updateQualityOptions(); // Fix for YouTube quality bug
+        updateQualityOptions();
     }
 
-    // NEW: Function to fix the YouTube quality display bug
     function updateQualityOptions() {
         const selectedType = typeSelect.value;
         const isQualityVisible = qualityGroup.style.display !== 'none';
-
         if (isQualityVisible) {
             qualitySelect.querySelectorAll('option').forEach(option => {
                 option.style.display = option.dataset.type === selectedType ? 'block' : 'none';
             });
-            // Set a default value if the current one is hidden
             if (qualitySelect.selectedOptions.length === 0 || qualitySelect.selectedOptions[0].style.display === 'none') {
                 for (let option of qualitySelect.options) {
                     if (option.style.display !== 'none') {
@@ -80,15 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Event Listeners & Download Logic ---
-
-    // NEW: Function to force a download - Updated for Mobile Compatibility
     function forceDownload(url) {
-        // This iframe technique is more reliable for triggering downloads
-        // on mobile browsers without navigating away from the page.
         const oldIframe = document.getElementById('download_iframe');
-        if (oldIframe) {
-            oldIframe.remove();
-        }
+        if (oldIframe) oldIframe.remove();
 
         const iframe = document.createElement('iframe');
         iframe.id = 'download_iframe';
@@ -103,27 +109,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    scrollLeftBtn.addEventListener('click', () => {
-        platformContainer.scrollBy({ left: -200, behavior: 'smooth' });
-    });
-
-    scrollRightBtn.addEventListener('click', () => {
-        platformContainer.scrollBy({ left: 200, behavior: 'smooth' });
-    });
-
+    scrollLeftBtn.addEventListener('click', () => platformContainer.scrollBy({ left: -200, behavior: 'smooth' }));
+    scrollRightBtn.addEventListener('click', () => platformContainer.scrollBy({ left: 200, behavior: 'smooth' }));
     typeSelect.addEventListener('change', updateQualityOptions);
 
     async function pollStatus(jobId) {
         pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(`/api/status/${jobId}`);
-                if (!response.ok) throw new Error('Could not get job status.');
+                // CORRECTED: Direct call to backend with API Key
+                const response = await fetch(`${CONFIG.backendUrl}/api/v2/status/${jobId}`, {
+                    headers: { 'x-api-key': CONFIG.apiKey }
+                });
+                if (!response.ok) throw new Error('Could not get job status from backend.');
                 const data = await response.json();
 
                 if (data.status === 'completed') {
                     clearInterval(pollInterval);
                     buttonText.textContent = 'Download Ready!';
-                    forceDownload(data.url); // FIXED: Use the correct download function
+                    // The backend now provides a full result object
+                    const result = data.result;
+                    // To ensure downloads work, we now construct the full URL
+                    const finalDownloadUrl = `${CONFIG.backendUrl}${result.downloadUrl}`;
+                    forceDownload(finalDownloadUrl);
                     setTimeout(() => {
                         downloaderSection.style.display = 'none';
                         downloadStartedSection.style.display = 'block';
@@ -133,13 +140,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert(`Error: ${data.error || 'Processing failed.'}`);
                     resetUI();
                 }
-                // No need for queued/processing text update here, it's on the button
             } catch (error) {
                 clearInterval(pollInterval);
                 alert(`Error: ${error.message}`);
                 resetUI();
             }
-        }, 2000);
+        }, 3000); // Polling interval increased slightly
     }
 
     convertBtn.addEventListener('click', async () => {
@@ -148,15 +154,17 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please paste a link first!');
             return;
         }
+        if (!CONFIG.backendUrl || !CONFIG.apiKey) {
+            alert('Backend configuration is missing. Cannot proceed.');
+            return;
+        }
 
-        // NEW: Premium platform check
         const config = platformConfig[selectedPlatform];
         if (config.premium) {
             alert('This is a premium platform. Please sign up to download from this site.');
             return;
         }
 
-        // NEW: Improved button state
         convertBtn.disabled = true;
         buttonText.textContent = 'Processing...';
         spinner.style.display = 'inline-block';
@@ -165,9 +173,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const quality = qualitySelect.value;
             const type = typeSelect.value;
 
-            const response = await fetch('/api/download', {
+            // CORRECTED: Direct call to backend with API Key
+            const response = await fetch(`${CONFIG.backendUrl}/api/v2/download`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': CONFIG.apiKey
+                },
                 body: JSON.stringify({ url, quality, type, platform: selectedPlatform }),
             });
 
@@ -179,13 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (data.jobId) {
                 pollStatus(data.jobId);
-            } else if (data.status === 'completed' && data.url) {
-                buttonText.textContent = 'Download Ready!';
-                forceDownload(data.url); // FIXED: Use the correct download function for cached results too
-                setTimeout(() => {
-                    downloaderSection.style.display = 'none';
-                    downloadStartedSection.style.display = 'block';
-                }, 1000);
             }
         } catch (error) {
             alert(`Error: ${error.message}`);
@@ -197,12 +202,9 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.value = '';
         downloaderSection.style.display = 'block';
         downloadStartedSection.style.display = 'none';
-
-        // NEW: Reset button state
         convertBtn.disabled = false;
         buttonText.textContent = 'Convert';
         spinner.style.display = 'none';
-
         if (pollInterval) clearInterval(pollInterval);
         updateUIForPlatform('youtube');
     }
@@ -210,5 +212,6 @@ document.addEventListener('DOMContentLoaded', () => {
     convertNextBtn.addEventListener('click', resetUI);
 
     // --- Initial Setup ---
+    await fetchConfig();
     updateUIForPlatform(selectedPlatform);
 });

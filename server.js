@@ -1,65 +1,37 @@
-require('dotenv').config();
-const express = require('express');
-const path = require('path');
-const axios = require('axios'); // We need axios here now
+import 'dotenv/config';
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-const BACKEND_URL = process.env.BACKEND_URL;
-const API_KEY = process.env.API_KEY;
+// We need to expose these to the client-side script
+const { BACKEND_URL, API_KEY } = process.env;
 
-app.use(express.json());
-app.use(express.static(__dirname));
-app.use('/static', express.static(path.join(__dirname, 'static')));
+if (!BACKEND_URL || !API_KEY) {
+    console.error("FATAL ERROR: BACKEND_URL and API_KEY must be defined in your .env file.");
+    process.exit(1);
+}
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use(express.static(path.join(__dirname, 'static')));
+
+// --- Page Routes ---
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/signup', (req, res) => res.sendFile(path.join(__dirname, 'signup.html')));
+app.get('/pricing', (req, res) => res.sendFile(path.join(__dirname, 'pricing.html')));
+
+// --- New Endpoint to provide config to the frontend ---
+app.get('/api/config', (req, res) => {
+    res.json({
+        backendUrl: BACKEND_URL,
+        apiKey: API_KEY
+    });
 });
-
-// --- API Proxy Endpoint ---
-// The frontend will call this, and this server will securely call the backend
-app.post('/api/download', async (req, res) => {
-    if (!BACKEND_URL || !API_KEY) {
-        return res.status(500).json({ error: 'Backend service is not configured.' });
-    }
-
-    try {
-        // Forward the request to the real backend
-        const backendResponse = await axios.post(`${BACKEND_URL}/start-download`, req.body, {
-            headers: {
-                'x-api-key': API_KEY
-            }
-        });
-        res.json(backendResponse.data);
-    } catch (error) {
-        const status = error.response ? error.response.status : 500;
-        const data = error.response ? error.response.data : { error: 'An internal error occurred.' };
-        res.status(status).json(data);
-    }
-});
-
-app.get('/api/status/:jobId', async (req, res) => {
-    if (!BACKEND_URL || !API_KEY) {
-        return res.status(500).json({ error: 'Backend service is not configured.' });
-    }
-
-    try {
-        const { jobId } = req.params;
-        const backendResponse = await axios.get(`${BACKEND_URL}/status/${jobId}`, {
-            headers: {
-                'x-api-key': API_KEY
-            }
-        });
-        res.json(backendResponse.data);
-    } catch (error) {
-        const status = error.response ? error.response.status : 500;
-        const data = error.response ? error.response.data : { error: 'An internal error occurred.' };
-        res.status(status).json(data);
-    }
-});
-
 
 // --- Server Startup ---
 app.listen(PORT, () => {
-    console.log(`Frontend Server is running on http://localhost:${PORT}`);
+    console.log(`JusDown Frontend Server is running on http://localhost:${PORT}`);
 });
