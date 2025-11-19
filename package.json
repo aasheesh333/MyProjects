@@ -10,17 +10,5 @@
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "express": "^4.18.2"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/aasheesh333/MyProjects.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/aasheesh333/MyProjects/issues"
-  },
-  "homepage": "https://github.com/aasheesh333/MyProjects#readme"
+  }
 }

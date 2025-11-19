@@ -9,30 +9,51 @@ export async function download({ url, contentType, quality }) {
         const { data: html } = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
         const $ = cheerio.load(html);
 
-        const videoUrl = $('meta[property="og:video"]').attr('content');
-        const imageUrl = $('meta[property="og:image"]').attr('content');
-        const title = $('meta[property="og:title"]').attr('content')?.replace(/"/g, '') || 'Instagram Content';
+        let jsonData = null;
+        $('script[type="application/json"]').each((index, element) => {
+            const scriptContent = $(element).html();
+            if (scriptContent.includes('"xdt_api__v1__media__shortcode__web_info"')) {
+                jsonData = JSON.parse(scriptContent);
+                return false;
+            }
+        });
+
+        if (!jsonData) {
+            return { success: false, error: "Could not find the required JSON data on the page.", platform: PLATFORM_IDENTIFIER };
+        }
+
+        const postData = jsonData.items[0];
+        if (!postData) {
+            return { success: false, error: "Failed to extract post data from the JSON.", platform: PLATFORM_IDENTIFIER };
+        }
+
+        const title = postData.caption?.text || 'Instagram Content';
+        const thumbnail = postData.image_versions2?.candidates[0]?.url;
+
+        const isVideo = postData.video_versions && postData.video_versions.length > 0;
 
         let downloadUrl, finalContentType, mimeType;
 
-        if (contentType === 'mp4' && videoUrl) {
-            downloadUrl = videoUrl;
+        if (contentType === 'mp4' && isVideo) {
+            downloadUrl = postData.video_versions[0].url;
             finalContentType = 'mp4';
             mimeType = 'video/mp4';
-        } else if (contentType === 'image' && imageUrl) {
-            downloadUrl = imageUrl;
+        } else if (contentType === 'image' && !isVideo) {
+            downloadUrl = postData.image_versions2?.candidates[0]?.url;
             finalContentType = 'image';
             mimeType = 'image/jpeg';
-        } else if (videoUrl) { // Fallback to best available
-            downloadUrl = videoUrl;
+        } else if (isVideo) { // Fallback to best available
+            downloadUrl = postData.video_versions[0].url;
             finalContentType = 'mp4';
             mimeType = 'video/mp4';
-        } else if (imageUrl) {
-            downloadUrl = imageUrl;
-            finalContentType = 'image';
-            mimeType = 'image/jpeg';
         } else {
-            return { success: false, error: "No public video or image found. The post may be private or a story.", platform: PLATFORM_IDENTIFIER };
+            downloadUrl = postData.image_versions2?.candidates[0]?.url;
+            finalContentType = 'image';
+            mimeType = 'image/jpeg';
+        }
+
+        if (!downloadUrl) {
+            return { success: false, error: "Failed to extract a downloadable video or image URL.", platform: PLATFORM_IDENTIFIER };
         }
 
         const filename = `${title.substring(0, 50)}.${finalContentType}`;
@@ -41,13 +62,14 @@ export async function download({ url, contentType, quality }) {
             success: true,
             platform: PLATFORM_IDENTIFIER,
             title,
-            thumbnail: imageUrl || '',
+            thumbnail,
             downloadUrl,
             filename,
             mimeType,
             contentType: finalContentType,
             quality: 'default'
         };
+
     } catch (error) {
         return { success: false, error: error.message, platform: PLATFORM_IDENTIFIER };
     }
