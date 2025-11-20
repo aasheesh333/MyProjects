@@ -40,25 +40,11 @@ This guide explains how to deploy and run the backend processing server on a new
     cd vps_backend
     ```
 3.  **Install dependencies:**
-    The project now includes modular downloaders which may have their own dependencies. Make sure to install them. `cheerio` has been added for the Instagram downloader.
     ```bash
     npm install
     ```
 
-## Step 3: Adding New Platform Support (e.g., Instagram)
-
-The backend now uses a modular approach for platform-specific downloaders, located in the `vps_backend/downloaders/` directory. The main `yt-dlp` logic is used as a fallback.
-
--   **Instagram support has been added using this new method.** The file `vps_backend/downloaders/instagram.js` handles Instagram URLs. This downloader supports single posts, carousels (galleries), and video-to-MP3 conversion.
--   This module uses the `axios` and `cheerio` packages for scraping. `cheerio` is a new dependency and is included in the `package.json`.
-
-**To add another platform:**
-1.  Create a new file in the `vps_backend/downloaders/` directory (e.g., `twitter.js`).
-2.  This file should export a single async function: `download(url)`.
-3.  This function should take a URL and return a specific object structure that the main `server.js` can process.
-4.  Update `vps_backend/server.js` to call your new module when the platform is detected.
-
-## Step 4: Configure Environment Variables
+## Step 3: Configure Environment Variables
 
 1.  **Create a `.env` file:**
     ```bash

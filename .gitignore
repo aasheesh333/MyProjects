@@ -16,6 +16,7 @@ node_modules/
 vps_backend/node_modules/
 
 # Log files
+*.log
 server.log
 vps_backend/*.log
 
