@@ -1,214 +1,95 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements ---
-    const platformSlider = document.querySelector('.platform-slider');
-    const platformContainer = document.querySelector('.platform-selector-container');
-    const scrollLeftBtn = document.getElementById('scroll-left-btn');
-    const scrollRightBtn = document.getElementById('scroll-right-btn');
-    const typeSelect = document.getElementById('type-select');
-    const qualityGroup = document.getElementById('quality-group');
-    const qualitySelect = document.getElementById('quality-select');
-    const convertBtn = document.getElementById('convert-btn');
-    const buttonText = convertBtn.querySelector('.button-text');
-    const spinner = convertBtn.querySelector('.spinner');
-    const urlInput = document.getElementById('url-input');
-    const downloaderSection = document.getElementById('downloader-section');
-    const downloadStartedSection = document.getElementById('download-started-section');
-    const convertNextBtn = document.getElementById('convert-next-btn');
 
-    // --- Platform Configuration ---
+document.addEventListener('DOMContentLoaded', () => {
     const platformConfig = {
-        'youtube':     { types: ['mp3', 'mp4'], quality: true, premium: false },
-        'instagram':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'facebook':    { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'tiktok':      { types: ['mp3', 'mp4'], quality: false, premium: false },
-        'snapchat':    { types: ['mp3', 'mp4'], quality: false, premium: false },
-        'dailymotion': { types: ['mp3', 'mp4'], quality: true, premium: false },
-        'x-twitter':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'linkedin':    { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'reddit':      { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'pinterest':   { types: ['mp3', 'mp4', 'image'], quality: false, premium: false },
-        'threads':     { types: ['mp3', 'mp4', 'image'], quality: false, premium: true },
-        'shutterstock': { types: ['image', 'mp4'], quality: false, premium: true },
-        'viddyoze':    { types: ['mp4'], quality: false, premium: true },
-        'storyblocks': { types: ['mp4'], quality: false, premium: true },
-        'vimeo':       { types: ['mp3', 'mp4'], quality: true, premium: true }
+        'youtube': { types: ['MP3', 'MP4'], premium: false },
+        'instagram': { types: ['MP3', 'MP4', 'Image'], premium: false },
+        'facebook': { types: ['MP3', 'MP4', 'Image'], premium: false },
+        'tiktok': { types: ['MP3', 'MP4'], premium: false },
+        'pinterest': { types: ['MP3', 'MP4', 'Image'], premium: false },
+        'snapchat': { types: ['MP3', 'MP4'], premium: false },
+        'dailymotion': { types: ['MP3', 'MP4'], premium: false },
+        'x-twitter': { types: ['MP3', 'MP4', 'Image'], premium: false },
+        'linkedin': { types: ['MP3', 'MP4', 'Image'], premium: false },
+        'reddit': { types: ['MP3', 'MP4', 'Image'], premium: false },
+        'threads': { types: ['MP3', 'MP4', 'Image'], premium: true },
+        'shutterstock': { types: ['MP3', 'MP4', 'Image'], premium: true },
+        'viddyoze': { types: ['MP3', 'MP4'], premium: true },
+        'storyblocks': { types: ['MP3', 'MP4'], premium: true },
+        'vimeo': { types: ['MP3', 'MP4'], premium: true }
     };
 
-    let selectedPlatform = 'youtube';
-    let pollInterval;
+    const qualityConfig = {
+        'MP3': ['320 kbps', '256 kbps', '128 kbps', '96 kbps'],
+        'MP4': ['1080p', '720p', '480p', '360p', '144p']
+    };
 
-    // --- UI Update Functions ---
-    function updateUIForPlatform(platform) {
-        selectedPlatform = platform;
-        const config = platformConfig[platform];
+    const platformIcons = document.querySelectorAll('.platform-icon');
+    let selectedPlatform = 'youtube'; // Default selection
 
-        document.querySelectorAll('.platform-icon').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.platform === platform);
-        });
-
-        typeSelect.innerHTML = '';
-        config.types.forEach(type => {
-            const option = document.createElement('option');
-            option.value = type;
-            option.textContent = type.toUpperCase();
-            typeSelect.appendChild(option);
-        });
-
-        qualityGroup.style.display = config.quality ? 'block' : 'none';
-        updateQualityOptions(); // Fix for YouTube quality bug
-    }
-
-    // NEW: Function to fix the YouTube quality display bug
-    function updateQualityOptions() {
-        const selectedType = typeSelect.value;
-        const isQualityVisible = qualityGroup.style.display !== 'none';
-
-        if (isQualityVisible) {
-            qualitySelect.querySelectorAll('option').forEach(option => {
-                option.style.display = option.dataset.type === selectedType ? 'block' : 'none';
-            });
-            // Set a default value if the current one is hidden
-            if (qualitySelect.selectedOptions.length === 0 || qualitySelect.selectedOptions[0].style.display === 'none') {
-                for (let option of qualitySelect.options) {
-                    if (option.style.display !== 'none') {
-                        option.selected = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // --- Event Listeners & Download Logic ---
-
-    // NEW: Function to force a download - Updated for Mobile Compatibility
-    function forceDownload(url) {
-        // This iframe technique is more reliable for triggering downloads
-        // on mobile browsers without navigating away from the page.
-        const oldIframe = document.getElementById('download_iframe');
-        if (oldIframe) {
-            oldIframe.remove();
-        }
-
-        const iframe = document.createElement('iframe');
-        iframe.id = 'download_iframe';
-        iframe.src = url;
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-    }
-
-    platformSlider.addEventListener('click', (e) => {
-        if (e.target.classList.contains('platform-icon')) {
-            updateUIForPlatform(e.target.dataset.platform);
-        }
-    });
+    const scroller = document.querySelector('.platform-slider');
+    const scrollLeftBtn = document.getElementById('scroll-left-btn');
+    const scrollRightBtn = document.getElementById('scroll-right-btn');
 
     scrollLeftBtn.addEventListener('click', () => {
-        platformContainer.scrollBy({ left: -200, behavior: 'smooth' });
+        scroller.scrollBy({ left: -200, behavior: 'smooth' });
     });
 
     scrollRightBtn.addEventListener('click', () => {
-        platformContainer.scrollBy({ left: 200, behavior: 'smooth' });
+        scroller.scrollBy({ left: 200, behavior: 'smooth' });
     });
+
+    const typeSelect = document.getElementById('type-select');
+    const qualitySelect = document.getElementById('quality-select');
+    const qualityGroup = document.getElementById('quality-group');
+
+    function updateQualityOptions() {
+        const selectedType = typeSelect.value;
+        if (selectedType === 'Image') {
+            qualityGroup.style.display = 'none';
+        } else {
+            qualityGroup.style.display = 'block';
+            qualitySelect.innerHTML = ''; // Clear existing options
+            const qualities = qualityConfig[selectedType];
+            qualities.forEach(quality => {
+                const option = document.createElement('option');
+                option.value = quality.split(' ')[0]; // e.g., '320'
+                option.textContent = quality;
+                qualitySelect.appendChild(option);
+            });
+        }
+    }
+
+    function updateDropdowns() {
+        const config = platformConfig[selectedPlatform];
+        typeSelect.innerHTML = ''; // Clear existing options
+        config.types.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type;
+            typeSelect.appendChild(option);
+        });
+        updateQualityOptions(); // Update quality based on the new first type
+    }
 
     typeSelect.addEventListener('change', updateQualityOptions);
 
-    async function pollStatus(jobId) {
-        pollInterval = setInterval(async () => {
-            try {
-                const response = await fetch(`/api/status/${jobId}`);
-                if (!response.ok) throw new Error('Could not get job status.');
-                const data = await response.json();
+    platformIcons.forEach(icon => {
+        icon.addEventListener('click', () => {
+            const platform = icon.dataset.platform;
+            const config = platformConfig[platform];
 
-                if (data.status === 'completed') {
-                    clearInterval(pollInterval);
-                    buttonText.textContent = 'Download Ready!';
-                    forceDownload(data.url); // FIXED: Use the correct download function
-                    setTimeout(() => {
-                        downloaderSection.style.display = 'none';
-                        downloadStartedSection.style.display = 'block';
-                    }, 1000);
-                } else if (data.status === 'failed') {
-                    clearInterval(pollInterval);
-                    alert(`Error: ${data.error || 'Processing failed.'}`);
-                    resetUI();
-                }
-                // No need for queued/processing text update here, it's on the button
-            } catch (error) {
-                clearInterval(pollInterval);
-                alert(`Error: ${error.message}`);
-                resetUI();
-            }
-        }, 2000);
-    }
-
-    convertBtn.addEventListener('click', async () => {
-        const url = urlInput.value.trim();
-        if (!url) {
-            alert('Please paste a link first!');
-            return;
-        }
-
-        // NEW: Premium platform check
-        const config = platformConfig[selectedPlatform];
-        if (config.premium) {
-            alert('This is a premium platform. Please sign up to download from this site.');
-            return;
-        }
-
-        // NEW: Improved button state
-        convertBtn.disabled = true;
-        buttonText.textContent = 'Processing...';
-        spinner.style.display = 'inline-block';
-
-        try {
-            const quality = qualitySelect.value;
-            const type = typeSelect.value;
-
-            const response = await fetch('/api/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, quality, type, platform: selectedPlatform }),
-            });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'A server error occurred.');
+            if (config.premium) {
+                alert('You have to Sign up');
+                return; // Stop further processing for premium platforms
             }
 
-            const data = await response.json();
-            if (data.jobId) {
-                pollStatus(data.jobId);
-            } else if (data.status === 'completed' && data.url) {
-                buttonText.textContent = 'Download Ready!';
-                forceDownload(data.url); // FIXED: Use the correct download function for cached results too
-                setTimeout(() => {
-                    downloaderSection.style.display = 'none';
-                    downloadStartedSection.style.display = 'block';
-                }, 1000);
-            }
-        } catch (error) {
-            alert(`Error: ${error.message}`);
-            resetUI();
-        }
+            platformIcons.forEach(i => i.classList.remove('active'));
+            icon.classList.add('active');
+            selectedPlatform = platform;
+            updateDropdowns();
+        });
     });
 
-    function resetUI() {
-        urlInput.value = '';
-        downloaderSection.style.display = 'block';
-        downloadStartedSection.style.display = 'none';
-
-        // NEW: Reset button state
-        convertBtn.disabled = false;
-        buttonText.textContent = 'Convert';
-        spinner.style.display = 'none';
-
-        if (pollInterval) clearInterval(pollInterval);
-        updateUIForPlatform('youtube');
-    }
-
-    convertNextBtn.addEventListener('click', resetUI);
-
-    // --- Initial Setup ---
-    updateUIForPlatform(selectedPlatform);
+    // Initial setup
+    updateDropdowns();
 });

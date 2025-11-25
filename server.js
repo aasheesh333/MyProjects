@@ -9,8 +9,7 @@ const BACKEND_URL = process.env.BACKEND_URL;
 const API_KEY = process.env.API_KEY;
 
 app.use(express.json());
-app.use(express.static(__dirname));
-app.use('/static', express.static(path.join(__dirname, 'static')));
+app.use(express.static('static'));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
