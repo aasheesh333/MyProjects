@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateQualityOptions() {
         const selectedType = typeSelect.value;
-        if (selectedType === 'Image') {
+        if (selectedType === 'Image' || selectedPlatform !== 'youtube') {
             qualityGroup.style.display = 'none';
         } else {
             qualityGroup.style.display = 'block';
