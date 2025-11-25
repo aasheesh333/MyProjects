@@ -116,11 +116,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     downloaderSection.style.display = 'none';
                     downloadStartedSection.style.display = 'block';
                     // Trigger download
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = data.url;
-                    document.body.appendChild(iframe);
-                    setTimeout(() => document.body.removeChild(iframe), 5000);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = data.url;
+                    a.download = ''; // Ensures download attribute is present
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => document.body.removeChild(a), 5000);
                 } else if (data.status === 'failed') {
                     clearInterval(interval);
                     setButtonState(false);
@@ -171,11 +173,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 setButtonState(false);
                 downloaderSection.style.display = 'none';
                 downloadStartedSection.style.display = 'block';
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.src = data.url;
-                document.body.appendChild(iframe);
-                 setTimeout(() => document.body.removeChild(iframe), 5000);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = data.url;
+                a.download = ''; // Ensures download attribute is present
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => document.body.removeChild(a), 5000);
             } else if (data.jobId) {
                 pollJobStatus(data.jobId);
             } else {

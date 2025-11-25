@@ -17,18 +17,15 @@ app.get('/', (req, res) => {
 
 // --- API Proxy Endpoint ---
 app.post('/api/download', async (req, res) => {
-    console.log('Proxy received request for /api/download');
     if (!BACKEND_URL || !API_KEY) {
         console.error('Proxy Error: Backend service is not configured. Check your .env file.');
         return res.status(500).json({ error: 'Backend service is not configured.' });
     }
 
     try {
-        console.log('Proxy is forwarding request to backend:', `${BACKEND_URL}/api/download`);
         const backendResponse = await axios.post(`${BACKEND_URL}/api/download`, req.body, {
             headers: { 'x-api-key': API_KEY }
         });
-        console.log('Proxy received response from backend:', backendResponse.data);
         res.json(backendResponse.data);
     } catch (error) {
         console.error('Proxy Error forwarding request:', error.response ? error.response.data : error.message);
@@ -39,7 +36,6 @@ app.post('/api/download', async (req, res) => {
 });
 
 app.get('/api/status/:jobId', async (req, res) => {
-    console.log(`Proxy received request for /api/status/${req.params.jobId}`);
     if (!BACKEND_URL || !API_KEY) {
         console.error('Proxy Error: Backend service is not configured. Check your .env file.');
         return res.status(500).json({ error: 'Backend service is not configured.' });

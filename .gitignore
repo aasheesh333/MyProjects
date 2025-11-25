@@ -3,23 +3,13 @@ node_modules/
 npm-debug.log
 .DS_Store
 
-# Python cache
-__pycache__/
-*.pyc
+# Log files
+*.log
 
 # Environment variables
 .env
 vps_backend/.env
 
-# Node.js dependencies
-node_modules/
-vps_backend/node_modules/
-
-# Log files
-server.log
-vps_backend/*.log
-
-# Download cache
+# Download cache & temp files
 vps_backend/public_downloads/
 vps_backend/temp_processing/
-vps_backend/.env

@@ -14,6 +14,7 @@ try {
     const PORT = process.env.PORT || 5002;
     const API_KEY = process.env.API_KEY;
     const BASE_URL = process.env.BASE_URL;
+    const SECURE_BASE_URL = BASE_URL ? BASE_URL.replace('http://', 'https://') : null;
 
     // --- Setup Directories & Force Download Middleware ---
     const DOWNLOAD_DIR = path.join(__dirname, 'public_downloads');
@@ -51,7 +52,6 @@ try {
         try {
             jobStatus[task.jobId] = { status: 'processing' };
             const result = await processDownload(task);
-            console.log(`[Job ${task.jobId}] DEBUG: Final URL to be sent: ${result.url}`);
             jobStatus[task.jobId] = { status: 'completed', url: result.url };
         } catch (error) {
             console.error(`[Job ${task.jobId}] Processing failed:`, error.message);
@@ -104,14 +104,12 @@ try {
     async function processDownload({ url, quality, type, platform }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            console.log(`[Cache HIT] Returning for: ${url}`);
-            return { url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` };
+            return { url: `${SECURE_BASE_URL}/downloads/${cache[cacheKey].filename}` };
         }
-        console.log(`[Cache MISS] Starting new download for: ${url}`);
 
         const requestDir = path.join(TEMP_DIR, uuidv4());
         fs.mkdirSync(requestDir);
-        // const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
+        const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
 
         const commonYtdlpOptions = {
             noCheckCertificate: true,
@@ -127,7 +125,6 @@ try {
             const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
 
             if (type === 'image' && isNoVideoError) {
-                console.log(`[Image Fallback] No video found for ${url}. Fetching thumbnail as image.`);
                 try {
                     const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
                     const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
@@ -137,12 +134,12 @@ try {
                         thumbnail: thumbnailOutput.stdout.trim(),
                     };
                 } catch (fallbackError) {
-                    // cleanup();
+                    cleanup();
                     console.error(`[Image Fallback] FAILED for ${url}:`, JSON.stringify(fallbackError, null, 2));
                     throw fallbackError;
                 }
             } else {
-                // cleanup();
+                cleanup();
                 console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
                 throw error;
             }
@@ -209,11 +206,11 @@ try {
             }
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
-            // cleanup();
-            return { url: `${BASE_URL}/downloads/${finalFilename}` };
+            cleanup();
+            return { url: `${SECURE_BASE_URL}/downloads/${finalFilename}` };
 
         } catch (error) {
-            // cleanup();
+            cleanup();
             console.error(`Post-metadata processing failed for ${url}:`, JSON.stringify(error, null, 2));
             throw error;
         }
@@ -226,7 +223,7 @@ try {
 
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            return res.json({ jobId: null, status: 'completed', url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` });
+            return res.json({ jobId: null, status: 'completed', url: `${SECURE_BASE_URL}/downloads/${cache[cacheKey].filename}` });
         }
 
         const jobId = uuidv4();
