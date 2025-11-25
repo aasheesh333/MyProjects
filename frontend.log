@@ -1,0 +1,10 @@
+
+> jusdown-frontend@1.0.0 start
+> node server.js
+
+[dotenv@17.2.3] injecting env (2) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+Frontend Server is running on http://localhost:5001
+Proxy received request for /api/download
+Proxy is forwarding request to backend: http://localhost:5002/api/download
+Proxy received response from backend: { jobId: 'e7081e49-6d83-4147-9dc8-b4643918b5d3' }
+Proxy received request for /api/status/e7081e49-6d83-4147-9dc8-b4643918b5d3

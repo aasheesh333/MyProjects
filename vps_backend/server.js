@@ -51,6 +51,7 @@ try {
         try {
             jobStatus[task.jobId] = { status: 'processing' };
             const result = await processDownload(task);
+            console.log(`[Job ${task.jobId}] DEBUG: Final URL to be sent: ${result.url}`);
             jobStatus[task.jobId] = { status: 'completed', url: result.url };
         } catch (error) {
             console.error(`[Job ${task.jobId}] Processing failed:`, error.message);
@@ -110,7 +111,7 @@ try {
 
         const requestDir = path.join(TEMP_DIR, uuidv4());
         fs.mkdirSync(requestDir);
-        const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
+        // const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
 
         const commonYtdlpOptions = {
             noCheckCertificate: true,
@@ -136,12 +137,12 @@ try {
                         thumbnail: thumbnailOutput.stdout.trim(),
                     };
                 } catch (fallbackError) {
-                    cleanup();
+                    // cleanup();
                     console.error(`[Image Fallback] FAILED for ${url}:`, JSON.stringify(fallbackError, null, 2));
                     throw fallbackError;
                 }
             } else {
-                cleanup();
+                // cleanup();
                 console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
                 throw error;
             }
@@ -208,18 +209,18 @@ try {
             }
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
-            cleanup();
+            // cleanup();
             return { url: `${BASE_URL}/downloads/${finalFilename}` };
 
         } catch (error) {
-            cleanup();
+            // cleanup();
             console.error(`Post-metadata processing failed for ${url}:`, JSON.stringify(error, null, 2));
             throw error;
         }
     }
 
     // --- API Endpoints ---
-    app.post('/start-download', apiKeyMiddleware, (req, res) => {
+    app.post('/api/download', apiKeyMiddleware, (req, res) => {
         const { url, quality, type, platform } = req.body;
         if (!url || !quality || !type || !platform) return res.status(400).json({ error: 'Missing parameters' });
 
@@ -246,8 +247,8 @@ try {
     });
 
     // --- Server Startup ---
-    app.listen(PORT, () => {
-        console.log(`VPS Backend is running on http://localhost:${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`VPS Backend is running on http://0.0.0.0:${PORT}`);
     });
 
 } catch (e) {

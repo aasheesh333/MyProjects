@@ -22,3 +22,4 @@ vps_backend/*.log
 # Download cache
 vps_backend/public_downloads/
 vps_backend/temp_processing/
+vps_backend/.env

@@ -1,4 +1,3 @@
-
 document.addEventListener('DOMContentLoaded', () => {
     const platformConfig = {
         'youtube': { types: ['MP3', 'MP4'], premium: false },
@@ -29,46 +28,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const scroller = document.querySelector('.platform-slider');
     const scrollLeftBtn = document.getElementById('scroll-left-btn');
     const scrollRightBtn = document.getElementById('scroll-right-btn');
+    const urlInput = document.getElementById('url-input');
+    const convertBtn = document.getElementById('convert-btn');
+    const convertBtnText = document.querySelector('.button-text');
+    const spinner = document.querySelector('.spinner');
+    const downloaderSection = document.getElementById('downloader-section');
+    const downloadStartedSection = document.getElementById('download-started-section');
+    const convertNextBtn = document.getElementById('convert-next-btn');
 
-    scrollLeftBtn.addEventListener('click', () => {
-        scroller.scrollBy({ left: -200, behavior: 'smooth' });
-    });
-
-    scrollRightBtn.addEventListener('click', () => {
-        scroller.scrollBy({ left: 200, behavior: 'smooth' });
-    });
+    scrollLeftBtn.addEventListener('click', () => scroller.scrollBy({ left: -200, behavior: 'smooth' }));
+    scrollRightBtn.addEventListener('click', () => scroller.scrollBy({ left: 200, behavior: 'smooth' }));
 
     const typeSelect = document.getElementById('type-select');
     const qualitySelect = document.getElementById('quality-select');
     const qualityGroup = document.getElementById('quality-group');
 
     function updateQualityOptions() {
-        const selectedType = typeSelect.value;
-        if (selectedType === 'Image' || selectedPlatform !== 'youtube') {
+        const selectedType = typeSelect.value.toUpperCase();
+        if (selectedType === 'IMAGE' || selectedPlatform !== 'youtube') {
             qualityGroup.style.display = 'none';
         } else {
             qualityGroup.style.display = 'block';
-            qualitySelect.innerHTML = ''; // Clear existing options
-            const qualities = qualityConfig[selectedType];
+            qualitySelect.innerHTML = '';
+            const qualities = qualityConfig[selectedType] || [];
             qualities.forEach(quality => {
                 const option = document.createElement('option');
-                option.value = quality.split(' ')[0]; // e.g., '320'
+                option.value = quality.split(' ')[0];
                 option.textContent = quality;
                 qualitySelect.appendChild(option);
             });
+             // Set default quality
+            if (selectedType === 'MP3') qualitySelect.value = '128';
+            if (selectedType === 'MP4') qualitySelect.value = '720';
         }
     }
 
     function updateDropdowns() {
         const config = platformConfig[selectedPlatform];
-        typeSelect.innerHTML = ''; // Clear existing options
+        typeSelect.innerHTML = '';
         config.types.forEach(type => {
             const option = document.createElement('option');
-            option.value = type;
+            option.value = type.toLowerCase();
             option.textContent = type;
             typeSelect.appendChild(option);
         });
-        updateQualityOptions(); // Update quality based on the new first type
+        updateQualityOptions();
     }
 
     typeSelect.addEventListener('change', updateQualityOptions);
@@ -77,17 +81,116 @@ document.addEventListener('DOMContentLoaded', () => {
         icon.addEventListener('click', () => {
             const platform = icon.dataset.platform;
             const config = platformConfig[platform];
-
             if (config.premium) {
-                alert('You have to Sign up');
-                return; // Stop further processing for premium platforms
+                alert('This is a premium feature. Please sign up to use it.');
+                return;
             }
-
             platformIcons.forEach(i => i.classList.remove('active'));
             icon.classList.add('active');
             selectedPlatform = platform;
             updateDropdowns();
         });
+    });
+
+    function setButtonState(isProcessing) {
+        if (isProcessing) {
+            convertBtn.disabled = true;
+            spinner.style.display = 'inline-block';
+            convertBtnText.textContent = 'Processing...';
+        } else {
+            convertBtn.disabled = false;
+            spinner.style.display = 'none';
+            convertBtnText.textContent = 'Convert';
+        }
+    }
+
+    function pollJobStatus(jobId) {
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/status/${jobId}`);
+                const data = await response.json();
+
+                if (data.status === 'completed') {
+                    clearInterval(interval);
+                    setButtonState(false);
+                    downloaderSection.style.display = 'none';
+                    downloadStartedSection.style.display = 'block';
+                    // Trigger download
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = data.url;
+                    document.body.appendChild(iframe);
+                    setTimeout(() => document.body.removeChild(iframe), 5000);
+                } else if (data.status === 'failed') {
+                    clearInterval(interval);
+                    setButtonState(false);
+                    if (data.error === 'This post is private. To download it, you must configure an Instagram account login on your server.') {
+                        alert('This post is private. To download it, you must configure an Instagram account login on your server.');
+                    } else {
+                        alert(`Download failed: ${data.error || 'An unknown error occurred.'}`);
+                    }
+                }
+                // If status is 'queued' or 'processing', the loop continues
+            } catch (error) {
+                clearInterval(interval);
+                setButtonState(false);
+                alert('An error occurred while checking the download status.');
+            }
+        }, 3000);
+    }
+
+    convertBtn.addEventListener('click', async () => {
+        const url = urlInput.value.trim();
+        if (!url) {
+            alert('Please paste a valid URL.');
+            return;
+        }
+
+        setButtonState(true);
+
+        try {
+            const response = await fetch('/api/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url,
+                    quality: qualitySelect.value,
+                    type: typeSelect.value,
+                    platform: selectedPlatform
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.status !== 200) {
+                 throw new Error(data.error || 'Failed to start download.');
+            }
+
+            if (data.status === 'completed') {
+                // It was a cached hit, download immediately
+                setButtonState(false);
+                downloaderSection.style.display = 'none';
+                downloadStartedSection.style.display = 'block';
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = data.url;
+                document.body.appendChild(iframe);
+                 setTimeout(() => document.body.removeChild(iframe), 5000);
+            } else if (data.jobId) {
+                pollJobStatus(data.jobId);
+            } else {
+                 throw new Error('Invalid response from server.');
+            }
+        } catch (error) {
+            setButtonState(false);
+            alert(`Error: ${error.message}`);
+        }
+    });
+
+    convertNextBtn.addEventListener('click', () => {
+        downloadStartedSection.style.display = 'none';
+        downloaderSection.style.display = 'block';
+        urlInput.value = '';
     });
 
     // Initial setup
