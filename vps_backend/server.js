@@ -123,17 +123,27 @@ try {
         } catch (error) {
             const stderr = error.stderr || '';
             if (stderr.includes('There is no video in this post')) {
+                const imageUrl = `${url.split('?')[0]}/media/?size=l`;
+                const rawTitle = `instagram_${uuidv4()}`;
+                const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
+                const finalFilename = `${baseFilename}.jpg`;
+                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+
                 try {
-                    const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
-                    const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
-                    metadata = {
-                        title: titleOutput.stdout.trim(),
-                        thumbnail: thumbnailOutput.stdout.trim(),
-                    };
-                } catch (fallbackError) {
+                    const response = await axios({ url: imageUrl, responseType: 'stream' });
+                    const writer = fs.createWriteStream(finalFilepath);
+                    response.data.pipe(writer);
+                    await new Promise((resolve, reject) => {
+                        writer.on('finish', resolve);
+                        writer.on('error', reject);
+                    });
+                    cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
                     cleanup();
-                    console.error(`Image fallback failed for ${url}:`, fallbackError);
-                    throw fallbackError;
+                    return { url: `${BASE_URL}/downloads/${finalFilename}` };
+                } catch (axiosError) {
+                    cleanup();
+                    console.error(`Direct image download failed for ${imageUrl}:`, axiosError);
+                    throw axiosError;
                 }
             } else {
                 cleanup();
