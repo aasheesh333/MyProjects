@@ -139,7 +139,7 @@ try {
                 archive.pipe(output);
                 for (let i = 0; i < metadata.entries.length; i++) {
                     const entry = metadata.entries[i];
-                    let mediaUrl = entry.url;
+                    let mediaUrl = entry.url || entry.thumbnail; // Use thumbnail for images
                     if (!mediaUrl && entry.formats && entry.formats.length > 0) {
                         const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
                         mediaUrl = preferredFormat.url;
