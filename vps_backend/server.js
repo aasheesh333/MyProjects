@@ -121,9 +121,25 @@ try {
         try {
             metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
         } catch (error) {
-            cleanup();
-            console.error(`Metadata fetch failed for ${url}:`, error);
-            throw error;
+            const stderr = error.stderr || '';
+            if (stderr.includes('There is no video in this post')) {
+                try {
+                    const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
+                    const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
+                    metadata = {
+                        title: titleOutput.stdout.trim(),
+                        thumbnail: thumbnailOutput.stdout.trim(),
+                    };
+                } catch (fallbackError) {
+                    cleanup();
+                    console.error(`Image fallback failed for ${url}:`, fallbackError);
+                    throw fallbackError;
+                }
+            } else {
+                cleanup();
+                console.error(`Metadata fetch failed for ${url}:`, error);
+                throw error;
+            }
         }
 
         try {
@@ -139,7 +155,7 @@ try {
                 archive.pipe(output);
                 for (let i = 0; i < metadata.entries.length; i++) {
                     const entry = metadata.entries[i];
-                    let mediaUrl = entry.url || entry.thumbnail; // Use thumbnail for images
+                    let mediaUrl = entry.url || entry.thumbnail;
                     if (!mediaUrl && entry.formats && entry.formats.length > 0) {
                         const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
                         mediaUrl = preferredFormat.url;
