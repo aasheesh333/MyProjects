@@ -5,8 +5,6 @@ try {
     const fs = require('fs');
     const { v4: uuidv4 } = require('uuid');
     const ytdlp = require('yt-dlp-exec');
-    const { exec } = require('child_process');
-    const ffmpeg = require('ffmpeg-static');
     const axios = require('axios');
     const archiver = require('archiver');
 
@@ -14,7 +12,6 @@ try {
     const PORT = process.env.PORT || 5002;
     const API_KEY = process.env.API_KEY;
     const BASE_URL = process.env.BASE_URL;
-    const SECURE_BASE_URL = BASE_URL ? BASE_URL.replace('http://', 'https://') : null;
 
     // --- Setup Directories & Force Download Middleware ---
     const DOWNLOAD_DIR = path.join(__dirname, 'public_downloads');
@@ -77,11 +74,11 @@ try {
         }
     }, 5 * 60 * 1000);
 
-    // --- NEW: Filename Formatting Helper ---
+    // --- Filename Formatting Helper ---
     function formatFilename({ title, type, quality }) {
         const safeTitle = (title || `download_${uuidv4()}`)
-            .replace(/[<>:"/\\|?*]/g, '_') // Sanitize illegal characters
-            .substring(0, 50); // Truncate to 50 chars to prevent length errors
+            .replace(/[<>:"/\\|?*]/g, '_')
+            .substring(0, 50);
 
         let qualityString = '';
         if (type === 'mp3') {
@@ -92,7 +89,6 @@ try {
 
         const typeString = type.toUpperCase();
 
-        // Omit quality for image/zip
         const finalTitle = qualityString ?
             `JusDown - ${safeTitle} - ${typeString} | ${qualityString}` :
             `JusDown - ${safeTitle} - ${typeString}`;
@@ -104,7 +100,7 @@ try {
     async function processDownload({ url, quality, type, platform }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            return { url: `${SECURE_BASE_URL}/downloads/${cache[cacheKey].filename}` };
+            return { url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` };
         }
 
         const requestDir = path.join(TEMP_DIR, uuidv4());
@@ -113,61 +109,51 @@ try {
 
         const commonYtdlpOptions = {
             noCheckCertificate: true,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            referer: 'https://www.google.com/',
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            referer: 'https://www.instagram.com/',
         };
+
+        if (platform === 'instagram') {
+            commonYtdlpOptions.extractorArgs = 'instagram:api_type=ios';
+        }
 
         let metadata;
         try {
             metadata = await ytdlp(url, { ...commonYtdlpOptions, dumpSingleJson: true });
         } catch (error) {
-            const stderr = error.stderr || '';
-            const isNoVideoError = stderr.includes('No video formats found') || stderr.includes('There is no video in this post');
-
-            if (type === 'image' && isNoVideoError) {
-                try {
-                    const titleOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getTitle: true });
-                    const thumbnailOutput = await ytdlp.exec(url, { ...commonYtdlpOptions, getThumbnail: true });
-
-                    metadata = {
-                        title: titleOutput.stdout.trim(),
-                        thumbnail: thumbnailOutput.stdout.trim(),
-                    };
-                } catch (fallbackError) {
-                    cleanup();
-                    console.error(`[Image Fallback] FAILED for ${url}:`, JSON.stringify(fallbackError, null, 2));
-                    throw fallbackError;
-                }
-            } else {
-                cleanup();
-                console.error(`Processing failed for ${url}:`, JSON.stringify(error, null, 2));
-                throw error;
-            }
+            cleanup();
+            console.error(`Metadata fetch failed for ${url}:`, error);
+            throw error;
         }
 
         try {
             const rawTitle = metadata.title;
             let finalFilename;
 
-            if (metadata.entries && (type === 'image' || type === 'mp4' || type === 'mp3')) {
+            if (metadata.entries) { // Carousel/Gallery Logic
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
                 finalFilename = `${baseFilename}.zip`;
-
                 const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
                 const output = fs.createWriteStream(zipFilePath);
                 const archive = archiver('zip', { zlib: { level: 9 } });
                 archive.pipe(output);
                 for (let i = 0; i < metadata.entries.length; i++) {
                     const entry = metadata.entries[i];
-                    const mediaUrl = entry.url || entry.formats?.find(f => f.url)?.url;
-                    if (!mediaUrl) continue;
+                    let mediaUrl = entry.url;
+                    if (!mediaUrl && entry.formats && entry.formats.length > 0) {
+                        const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
+                        mediaUrl = preferredFormat.url;
+                    }
+                    if (!mediaUrl) {
+                        console.warn(`[Carousel] Could not find a downloadable URL for entry ${i} in ${url}. Skipping.`);
+                        continue;
+                    }
                     const fileResponse = await axios({ url: mediaUrl, responseType: 'stream' });
                     const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
                     archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
                 }
                 await archive.finalize();
-            }
-            else if (type === 'image') {
+            } else if (type === 'image') {
                 const imageUrl = metadata.thumbnail || metadata.url;
                 if (!imageUrl) throw new Error('Could not find image URL.');
                 const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
@@ -177,41 +163,27 @@ try {
                 const response = await axios({ url: imageUrl, responseType: 'stream' });
                 const writer = fs.createWriteStream(finalFilepath);
                 response.data.pipe(writer);
-                await new Promise((resolve, reject) => {
-                    writer.on('finish', resolve); writer.on('error', reject);
-                });
-            }
-            else {
-                if (type === 'mp3') {
-                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
-                    finalFilename = `${baseFilename}.mp3`;
-                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                    const audioUrl = metadata.url || (await ytdlp.exec(url, { ...commonYtdlpOptions, getUrl: true, format: 'bestaudio/best' })).stdout.trim().split('\n')[0];
-                    if (!audioUrl) throw new Error('Could not retrieve valid audio URL.');
-                    const audioPath = path.join(requestDir, `audio_source`);
-                    const audioStream = await axios({ method: 'get', url: audioUrl, responseType: 'stream' });
-                    const audioWriter = fs.createWriteStream(audioPath);
-                    audioStream.data.pipe(audioWriter);
-                    await new Promise((resolve, reject) => { audioWriter.on('finish', resolve); audioWriter.on('error', reject); });
-                    await new Promise((resolve, reject) => {
-                        exec(`"${ffmpeg}" -i "${audioPath}" -b:a ${quality}k "${finalFilepath}"`, (err) => err ? reject(err) : resolve());
-                    });
-                } else { // MP4 logic
-                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
-                    finalFilename = `${baseFilename}.mp4`;
-                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                    const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
-                    await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
-                }
+                await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+            } else if (type === 'mp3') {
+                const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
+                finalFilename = `${baseFilename}.mp3`;
+                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                await ytdlp.exec(url, { ...commonYtdlpOptions, extractAudio: true, audioFormat: 'mp3', audioQuality: `${quality}K`, format: 'bestaudio/best', output: finalFilepath });
+            } else { // MP4 logic
+                const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
+                finalFilename = `${baseFilename}.mp4`;
+                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
+                await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
             }
 
             cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
             cleanup();
-            return { url: `${SECURE_BASE_URL}/downloads/${finalFilename}` };
+            return { url: `${BASE_URL}/downloads/${finalFilename}` };
 
         } catch (error) {
             cleanup();
-            console.error(`Post-metadata processing failed for ${url}:`, JSON.stringify(error, null, 2));
+            console.error(`Processing failed for ${url}:`, error);
             throw error;
         }
     }
@@ -223,7 +195,7 @@ try {
 
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
-            return res.json({ jobId: null, status: 'completed', url: `${SECURE_BASE_URL}/downloads/${cache[cacheKey].filename}` });
+            return res.json({ jobId: null, status: 'completed', url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` });
         }
 
         const jobId = uuidv4();

@@ -73,7 +73,8 @@ nano .env
 Add the following content, replacing the placeholder values:
 
 ```env
-# The URL of your backend server
+# The URL of your backend server. If frontend and backend are on the same machine,
+# use http://localhost:5002 for better security and performance.
 BACKEND_URL=http://<your-vps-ip>:5002
 
 # A secret key to authorize requests between the frontend and backend
