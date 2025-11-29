@@ -123,7 +123,8 @@ try {
         } catch (error) {
             const stderr = error.stderr || '';
             if (stderr.includes('There is no video in this post')) {
-                const imageUrl = `${url.split('?')[0]}/media/?size=l`;
+                const cleanedUrl = url.split('?')[0].replace(/\/$/, '');
+                const imageUrl = `${cleanedUrl}/media/?size=l`;
                 const rawTitle = `instagram_${uuidv4()}`;
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
                 const finalFilename = `${baseFilename}.jpg`;
