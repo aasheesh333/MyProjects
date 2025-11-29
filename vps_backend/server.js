@@ -167,11 +167,10 @@ try {
                 const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
                 const output = fs.createWriteStream(zipFilePath);
                 const archive = archiver('zip', { zlib: { level: 9 } });
+
                 archive.pipe(output);
 
-                console.log(`[Carousel] Starting download for ${metadata.entries.length} items.`);
-                for (let i = 0; i < metadata.entries.length; i++) {
-                    const entry = metadata.entries[i];
+                const downloadPromises = metadata.entries.map(async (entry, i) => {
                     let mediaUrl = entry.url || entry.thumbnail;
                     if (!mediaUrl && entry.formats && entry.formats.length > 0) {
                         const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
@@ -180,11 +179,10 @@ try {
 
                     if (!mediaUrl) {
                         console.warn(`[Carousel] Could not find a downloadable URL for entry ${i + 1}. Skipping.`);
-                        continue;
+                        return;
                     }
 
                     try {
-                        console.log(`[Carousel] Downloading item ${i + 1}: ${mediaUrl}`);
                         const fileResponse = await axios({
                             url: mediaUrl,
                             responseType: 'stream',
@@ -192,15 +190,13 @@ try {
                         });
                         const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
                         archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
-                        console.log(`[Carousel] Successfully appended item ${i + 1} to zip.`);
                     } catch (itemError) {
                         console.error(`[Carousel] Failed to download or append item ${i + 1}. Error: ${itemError.message}. Skipping.`);
                     }
-                }
+                });
 
-                console.log('[Carousel] Finalizing zip archive.');
+                await Promise.all(downloadPromises);
                 await archive.finalize();
-                console.log('[Carousel] Zip archive finalized successfully.');
             } else if (type === 'image') {
                 const imageUrl = metadata.thumbnail || metadata.url;
                 if (!imageUrl) throw new Error('Could not find image URL.');
