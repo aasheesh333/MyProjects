@@ -161,7 +161,8 @@ try {
             const rawTitle = metadata.title;
             let finalFilename;
 
-            if (metadata.entries) { // Carousel/Gallery Logic
+            const entries = metadata.entries || (metadata.requested_formats ? null : [metadata]);
+            if (entries) { // Carousel/Gallery Logic
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
                 finalFilename = `${baseFilename}.zip`;
                 const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
@@ -170,7 +171,7 @@ try {
 
                 archive.pipe(output);
 
-                const downloadPromises = metadata.entries.map(async (entry, i) => {
+                const downloadPromises = entries.map(async (entry, i) => {
                     let mediaUrl = entry.url || entry.thumbnail;
                     if (!mediaUrl && entry.formats && entry.formats.length > 0) {
                         const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
