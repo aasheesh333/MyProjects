@@ -158,6 +158,7 @@ try {
         }
 
         try {
+            console.log('Full yt-dlp metadata:', JSON.stringify(metadata, null, 2));
             const rawTitle = metadata.title;
             let finalFilename;
 
