@@ -131,7 +131,11 @@ try {
                 const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
 
                 try {
-                    const response = await axios({ url: imageUrl, responseType: 'stream' });
+                    const response = await axios({
+                        url: imageUrl,
+                        responseType: 'stream',
+                        headers: { 'User-Agent': commonYtdlpOptions.userAgent }
+                    });
                     const writer = fs.createWriteStream(finalFilepath);
                     response.data.pipe(writer);
                     await new Promise((resolve, reject) => {
@@ -175,7 +179,11 @@ try {
                         console.warn(`[Carousel] Could not find a downloadable URL for entry ${i} in ${url}. Skipping.`);
                         continue;
                     }
-                    const fileResponse = await axios({ url: mediaUrl, responseType: 'stream' });
+                    const fileResponse = await axios({
+                        url: mediaUrl,
+                        responseType: 'stream',
+                        headers: { 'User-Agent': commonYtdlpOptions.userAgent }
+                    });
                     const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
                     archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
                 }
@@ -187,7 +195,11 @@ try {
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
                 finalFilename = `${baseFilename}${extension}`;
                 const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                const response = await axios({ url: imageUrl, responseType: 'stream' });
+                const response = await axios({
+                    url: imageUrl,
+                    responseType: 'stream',
+                    headers: { 'User-Agent': commonYtdlpOptions.userAgent }
+                });
                 const writer = fs.createWriteStream(finalFilepath);
                 response.data.pipe(writer);
                 await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
