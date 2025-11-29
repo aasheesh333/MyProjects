@@ -6,7 +6,7 @@ try {
     const { v4: uuidv4 } = require('uuid');
     const ytdlp = require('yt-dlp-exec');
     const axios = require('axios');
-    const archiver = require('archiver');
+    const JSZip = require('jszip');
 
     const app = express();
     const PORT = process.env.PORT || 5002;
@@ -162,14 +162,11 @@ try {
             let finalFilename;
 
             const entries = metadata.entries || (metadata.requested_formats ? null : [metadata]);
-            if (entries) { // Carousel/Gallery Logic
+            if (entries) { // Carousel/Gallery Logic with JSZip
                 const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
                 finalFilename = `${baseFilename}.zip`;
                 const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
-                const output = fs.createWriteStream(zipFilePath);
-                const archive = archiver('zip', { zlib: { level: 9 } });
-
-                archive.pipe(output);
+                const zip = new JSZip();
 
                 const downloadPromises = entries.map(async (entry, i) => {
                     let mediaUrl = entry.url || entry.thumbnail;
@@ -177,27 +174,25 @@ try {
                         const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
                         mediaUrl = preferredFormat.url;
                     }
-
                     if (!mediaUrl) {
                         console.warn(`[Carousel] Could not find a downloadable URL for entry ${i + 1}. Skipping.`);
                         return;
                     }
-
                     try {
-                        const fileResponse = await axios({
+                        const response = await axios({
                             url: mediaUrl,
-                            responseType: 'stream',
+                            responseType: 'arraybuffer',
                             headers: { 'User-Agent': commonYtdlpOptions.userAgent }
                         });
                         const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
-                        archive.append(fileResponse.data, { name: `${rawTitle}_${i + 1}${extension}` });
+                        zip.file(`${rawTitle}_${i + 1}${extension}`, response.data);
                     } catch (itemError) {
-                        console.error(`[Carousel] Failed to download or append item ${i + 1}. Error: ${itemError.message}. Skipping.`);
+                        console.error(`[Carousel] Failed to download item ${i + 1}. Error: ${itemError.message}. Skipping.`);
                     }
                 });
-
                 await Promise.all(downloadPromises);
-                await archive.finalize();
+                const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+                fs.writeFileSync(zipFilePath, zipBuffer);
             } else if (type === 'image') {
                 const imageUrl = metadata.thumbnail || metadata.url;
                 if (!imageUrl) throw new Error('Could not find image URL.');
