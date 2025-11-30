@@ -104,6 +104,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function triggerDownload(url) {
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 5000);
+    }
+
     function pollJobStatus(jobId) {
         const interval = setInterval(async () => {
             try {
@@ -115,24 +125,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     setButtonState(false);
                     downloaderSection.style.display = 'none';
                     downloadStartedSection.style.display = 'block';
-                    // Trigger download
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = data.url;
-                    a.download = ''; // Ensures download attribute is present
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => document.body.removeChild(a), 5000);
+
+                    if (data.urls && Array.isArray(data.urls)) {
+                        // Carousel: Download each file
+                        data.urls.forEach((url, index) => {
+                            setTimeout(() => triggerDownload(url), index * 1000);
+                        });
+                    } else if (data.url) {
+                        // Single file
+                        triggerDownload(data.url);
+                    }
                 } else if (data.status === 'failed') {
                     clearInterval(interval);
                     setButtonState(false);
-                    if (data.error === 'This post is private. To download it, you must configure an Instagram account login on your server.') {
-                        alert('This post is private. To download it, you must configure an Instagram account login on your server.');
-                    } else {
-                        alert(`Download failed: ${data.error || 'An unknown error occurred.'}`);
-                    }
+                    alert(`Download failed: ${data.error || 'An unknown error occurred.'}`);
                 }
-                // If status is 'queued' or 'processing', the loop continues
             } catch (error) {
                 clearInterval(interval);
                 setButtonState(false);
@@ -169,17 +176,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (data.status === 'completed') {
-                // It was a cached hit, download immediately
                 setButtonState(false);
                 downloaderSection.style.display = 'none';
                 downloadStartedSection.style.display = 'block';
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = data.url;
-                a.download = ''; // Ensures download attribute is present
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => document.body.removeChild(a), 5000);
+
+                if (data.urls && Array.isArray(data.urls)) {
+                    data.urls.forEach((url, index) => {
+                        setTimeout(() => triggerDownload(url), index * 1000);
+                    });
+                } else if (data.url) {
+                    triggerDownload(data.url);
+                }
             } else if (data.jobId) {
                 pollJobStatus(data.jobId);
             } else {

@@ -6,7 +6,6 @@ try {
     const { v4: uuidv4 } = require('uuid');
     const ytdlp = require('yt-dlp-exec');
     const axios = require('axios');
-    const JSZip = require('jszip');
 
     const app = express();
     const PORT = process.env.PORT || 5002;
@@ -49,7 +48,7 @@ try {
         try {
             jobStatus[task.jobId] = { status: 'processing' };
             const result = await processDownload(task);
-            jobStatus[task.jobId] = { status: 'completed', url: result.url };
+            jobStatus[task.jobId] = { status: 'completed', ...result };
         } catch (error) {
             console.error(`[Job ${task.jobId}] Processing failed:`, error.message);
             jobStatus[task.jobId] = { status: 'failed', error: 'Processing failed.' };
@@ -65,17 +64,20 @@ try {
         const now = Date.now();
         for (const key in cache) {
             if (now - cache[key].timestamp > 60 * 60 * 1000) {
-                const filePath = path.join(DOWNLOAD_DIR, cache[key].filename);
-                fs.unlink(filePath, (err) => {
-                    if (err) console.error(`Error deleting cached file: ${err}`);
-                });
+                const filenames = cache[key].filenames || [cache[key].filename];
+                for (const filename of filenames) {
+                    const filePath = path.join(DOWNLOAD_DIR, filename);
+                    fs.unlink(filePath, (err) => {
+                        if (err) console.error(`Error deleting cached file: ${err}`);
+                    });
+                }
                 delete cache[key];
             }
         }
     }, 5 * 60 * 1000);
 
     // --- Filename Formatting Helper ---
-    function formatFilename({ title, type, quality }) {
+    function formatFilename({ title, type, quality, index = -1 }) {
         const safeTitle = (title || `download_${uuidv4()}`)
             .replace(/[<>:"/\\|?*]/g, '_')
             .substring(0, 50);
@@ -88,10 +90,11 @@ try {
         }
 
         const typeString = type.toUpperCase();
+        const indexString = index >= 0 ? `_part_${index + 1}` : '';
 
         const finalTitle = qualityString ?
-            `JusDown - ${safeTitle} - ${typeString} | ${qualityString}` :
-            `JusDown - ${safeTitle} - ${typeString}`;
+            `JusDown - ${safeTitle}${indexString} - ${typeString} | ${qualityString}` :
+            `JusDown - ${safeTitle}${indexString} - ${typeString}`;
 
         return finalTitle;
     }
@@ -100,6 +103,9 @@ try {
     async function processDownload({ url, quality, type, platform }) {
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
+            if (cache[cacheKey].urls) {
+                return { urls: cache[cacheKey].urls };
+            }
             return { url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` };
         }
 
@@ -147,84 +153,96 @@ try {
                     return { url: `${BASE_URL}/downloads/${finalFilename}` };
                 } catch (axiosError) {
                     cleanup();
-                    console.error(`Direct image download failed for ${imageUrl}:`, axiosError);
                     throw axiosError;
                 }
             } else {
                 cleanup();
-                console.error(`Metadata fetch failed for ${url}:`, error);
                 throw error;
             }
         }
 
         try {
-            console.log('Full yt-dlp metadata:', JSON.stringify(metadata, null, 2));
             const rawTitle = metadata.title;
             let finalFilename;
 
             const entries = metadata.entries || (metadata.requested_formats ? null : [metadata]);
-            if (entries) { // Carousel/Gallery Logic with JSZip
-                const baseFilename = formatFilename({ title: rawTitle, type: 'Gallery', quality: null });
-                finalFilename = `${baseFilename}.zip`;
-                const zipFilePath = path.join(DOWNLOAD_DIR, finalFilename);
-                const zip = new JSZip();
-
+            if (entries && entries.length > 1) { // Carousel/Gallery Logic
+                const downloadedFiles = [];
                 const downloadPromises = entries.map(async (entry, i) => {
                     let mediaUrl = entry.url || entry.thumbnail;
                     if (!mediaUrl && entry.formats && entry.formats.length > 0) {
                         const preferredFormat = entry.formats.find(f => f.format_id === 'best') || entry.formats[entry.formats.length - 1];
                         mediaUrl = preferredFormat.url;
                     }
+
                     if (!mediaUrl) {
                         console.warn(`[Carousel] Could not find a downloadable URL for entry ${i + 1}. Skipping.`);
                         return;
                     }
+
                     try {
-                        const response = await axios({
+                        const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
+                        const baseFilename = formatFilename({ title: rawTitle, type: extension === '.mp4' ? 'MP4' : 'Image', quality: null, index: i });
+                        const itemFilename = `${baseFilename}${extension}`;
+                        const itemFilepath = path.join(DOWNLOAD_DIR, itemFilename);
+
+                        const fileResponse = await axios({
                             url: mediaUrl,
-                            responseType: 'arraybuffer',
+                            responseType: 'stream',
                             headers: { 'User-Agent': commonYtdlpOptions.userAgent }
                         });
-                        const extension = path.extname(new URL(mediaUrl).pathname) || '.jpg';
-                        zip.file(`${rawTitle}_${i + 1}${extension}`, response.data);
+
+                        const writer = fs.createWriteStream(itemFilepath);
+                        fileResponse.data.pipe(writer);
+                        await new Promise((resolve, reject) => {
+                            writer.on('finish', resolve);
+                            writer.on('error', reject);
+                        });
+                        downloadedFiles.push(itemFilename);
                     } catch (itemError) {
                         console.error(`[Carousel] Failed to download item ${i + 1}. Error: ${itemError.message}. Skipping.`);
                     }
                 });
-                await Promise.all(downloadPromises);
-                const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
-                fs.writeFileSync(zipFilePath, zipBuffer);
-            } else if (type === 'image') {
-                const imageUrl = metadata.thumbnail || metadata.url;
-                if (!imageUrl) throw new Error('Could not find image URL.');
-                const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
-                const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
-                finalFilename = `${baseFilename}${extension}`;
-                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                const response = await axios({
-                    url: imageUrl,
-                    responseType: 'stream',
-                    headers: { 'User-Agent': commonYtdlpOptions.userAgent }
-                });
-                const writer = fs.createWriteStream(finalFilepath);
-                response.data.pipe(writer);
-                await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
-            } else if (type === 'mp3') {
-                const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
-                finalFilename = `${baseFilename}.mp3`;
-                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                await ytdlp.exec(url, { ...commonYtdlpOptions, extractAudio: true, audioFormat: 'mp3', audioQuality: `${quality}K`, format: 'bestaudio/best', output: finalFilepath });
-            } else { // MP4 logic
-                const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
-                finalFilename = `${baseFilename}.mp4`;
-                const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
-                const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
-                await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
-            }
 
-            cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
-            cleanup();
-            return { url: `${BASE_URL}/downloads/${finalFilename}` };
+                await Promise.all(downloadPromises);
+                const urls = downloadedFiles.map(filename => `${BASE_URL}/downloads/${filename}`);
+                cache[cacheKey] = { urls, filenames: downloadedFiles, timestamp: Date.now() };
+                cleanup();
+                return { urls };
+
+            } else { // Single Media Logic
+                if (type === 'image') {
+                    const imageUrl = metadata.thumbnail || metadata.url;
+                    if (!imageUrl) throw new Error('Could not find image URL.');
+                    const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
+                    const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
+                    finalFilename = `${baseFilename}${extension}`;
+                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                    const response = await axios({
+                        url: imageUrl,
+                        responseType: 'stream',
+                        headers: { 'User-Agent': commonYtdlpOptions.userAgent }
+                    });
+                    const writer = fs.createWriteStream(finalFilepath);
+                    response.data.pipe(writer);
+                    await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+                } else if (type === 'mp3') {
+                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP3', quality: quality });
+                    finalFilename = `${baseFilename}.mp3`;
+                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                    await ytdlp.exec(url, { ...commonYtdlpOptions, extractAudio: true, audioFormat: 'mp3', audioQuality: `${quality}K`, format: 'bestaudio/best', output: finalFilepath });
+                } else { // MP4 logic
+                    const baseFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality });
+                    finalFilename = `${baseFilename}.mp4`;
+                    const finalFilepath = path.join(DOWNLOAD_DIR, finalFilename);
+                    const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
+                    await ytdlp.exec(url, { ...commonYtdlpOptions, format: formatSelector, output: finalFilepath, recodeVideo: 'mp4' });
+                }
+
+                cache[cacheKey] = { filename: finalFilename, timestamp: Date.now() };
+                cleanup();
+                return { url: `${BASE_URL}/downloads/${finalFilename}` };
+            }
 
         } catch (error) {
             cleanup();
@@ -240,6 +258,9 @@ try {
 
         const cacheKey = `${url}|${quality}|${type}`;
         if (cache[cacheKey]) {
+            if (cache[cacheKey].urls) {
+                return res.json({ jobId: null, status: 'completed', urls: cache[cacheKey].urls });
+            }
             return res.json({ jobId: null, status: 'completed', url: `${BASE_URL}/downloads/${cache[cacheKey].filename}` });
         }
 
