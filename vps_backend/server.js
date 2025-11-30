@@ -7,6 +7,7 @@ try {
     const ytdlp = require('yt-dlp-exec');
     const axios = require('axios');
     const cheerio = require('cheerio');
+    const facebookDownloader = require('./facebook_downloader');
 
     const app = express();
     const PORT = process.env.PORT || 5002;
@@ -122,6 +123,23 @@ try {
         const requestDir = path.join(TEMP_DIR, uuidv4());
         fs.mkdirSync(requestDir);
         const cleanup = () => fs.rm(requestDir, { recursive: true, force: true }, () => {});
+
+        // --- Facebook Specific Logic ---
+        if (platform === 'facebook') {
+            try {
+                const result = await facebookDownloader({ url, quality, type });
+                if (result.urls) {
+                    cache[cacheKey] = { urls: result.urls, filenames: result.filenames, timestamp: Date.now() };
+                } else {
+                    cache[cacheKey] = { filename: result.filename, timestamp: Date.now() };
+                }
+                cleanup();
+                return result;
+            } catch (error) {
+                cleanup();
+                throw error;
+            }
+        }
 
         const commonYtdlpOptions = {
             noCheckCertificate: true,
