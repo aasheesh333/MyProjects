@@ -39,8 +39,10 @@ function formatFilename({ title, type, quality, index = -1 }) {
 }
 
 async function downloadFile(url, filepath, userAgent) {
+    // Clean URL (remove HTML entities like &amp;)
+    const cleanUrl = url.replace(/&amp;/g, '&');
     const response = await axios({
-        url,
+        url: cleanUrl,
         responseType: 'stream',
         headers: { 'User-Agent': userAgent }
     });
@@ -90,15 +92,12 @@ function extractId(url, html = '') {
     }
 
     if (html) {
-        // ID in path
         const idMatch = html.match(/\/(\d{15,16})\//);
         if (idMatch) return idMatch[1];
 
-        // ID in meta
         const contentMatch = html.match(/"content_id":"(\d+)"/);
         if (contentMatch) return contentMatch[1];
 
-        // ID in property
         const propMatch = html.match(/"target_id":(\d+)/);
         if (propMatch) return propMatch[1];
     }
@@ -111,7 +110,7 @@ async function facebookDownloader({ url, quality, type }) {
     let effectiveUrl = url;
     let extractedId = null;
 
-    // A. Resolve Redirects (Share Links)
+    // 1. Resolve "share" links
     if (url.includes('share') || url.includes('sfnsn')) {
         console.log('[Facebook] Resolving share URL...');
         const resolved = await resolveRedirect(url);
@@ -124,43 +123,54 @@ async function facebookDownloader({ url, quality, type }) {
         extractedId = extractId(url);
     }
 
-    // B. Attempt yt-dlp on Canonical URL if ID found
-    if (extractedId) {
-        console.log(`[Facebook] Found ID: ${extractedId}.`);
-        // Try Canonical Reel URL first
-        const canonicalUrl = `https://www.facebook.com/reel/${extractedId}`;
-        try {
-            console.log(`[Facebook] Attempting yt-dlp on canonical: ${canonicalUrl}`);
-            return await runYtDlp(canonicalUrl, type, quality);
-        } catch (e) {
-            console.log(`[Facebook] Canonical yt-dlp failed: ${e.message}`);
-            // Try Video.php URL
-             const videoPhpUrl = `https://www.facebook.com/video.php?v=${extractedId}`;
-             try {
-                console.log(`[Facebook] Attempting yt-dlp on video.php: ${videoPhpUrl}`);
-                return await runYtDlp(videoPhpUrl, type, quality);
-            } catch (e2) {
-                console.log(`[Facebook] Video.php yt-dlp failed: ${e2.message}`);
-            }
-        }
-    } else {
-        // Try yt-dlp on effective URL directly
-        try {
-            console.log(`[Facebook] Attempting yt-dlp on effective URL: ${effectiveUrl}`);
-            return await runYtDlp(effectiveUrl, type, quality);
-        } catch (e) {
-            console.log(`[Facebook] Effective URL yt-dlp failed: ${e.message}`);
+    // 2. Rewrite 'story.php' links to 'posts' format to bypass login wall
+    // https://www.facebook.com/story.php?story_fbid=ID&id=USER -> https://www.facebook.com/USER/posts/ID
+    if (effectiveUrl.includes('story.php') && extractedId) {
+        const userMatch = effectiveUrl.match(/id=(\d+)/);
+        if (userMatch) {
+            const userId = userMatch[1];
+            // Use canonical www URL for scraper (it handles mobile redirection if needed)
+            // But actually we want Mobile scraper to work, so we can use the ID logic there
+            // Let's just update effectiveUrl to the robust format
+            effectiveUrl = `https://www.facebook.com/${userId}/posts/${extractedId}`;
+            console.log(`[Facebook] Rewritten story.php to: ${effectiveUrl}`);
         }
     }
 
-    // C. Fallback Scraper
+    // 3. Attempt yt-dlp first (Best for Video)
+    // Only if type is video/mp3, OR if we are just exploring.
+    // If type is explicitly image, we skip yt-dlp usually, BUT yt-dlp can extract thumbnails.
+    // However, for single images, scraper is faster/better.
+
+    if (type !== 'image') {
+        if (extractedId) {
+            console.log(`[Facebook] Found ID: ${extractedId}.`);
+            const canonicalUrl = `https://www.facebook.com/reel/${extractedId}`;
+            try {
+                console.log(`[Facebook] Attempting yt-dlp on canonical: ${canonicalUrl}`);
+                return await runYtDlp(canonicalUrl, type, quality);
+            } catch (e) {
+                console.log(`[Facebook] Canonical yt-dlp failed: ${e.message}`);
+                const videoPhpUrl = `https://www.facebook.com/video.php?v=${extractedId}`;
+                 try {
+                    return await runYtDlp(videoPhpUrl, type, quality);
+                } catch (e2) {}
+            }
+        } else {
+            try {
+                return await runYtDlp(effectiveUrl, type, quality);
+            } catch (e) {}
+        }
+    }
+
+    // 4. Fallback Scraper
     console.log('[Facebook] Attempting scraping fallback...');
-    // We scrape the effective URL (which might be m.facebook.com if resolved via Mobile UA)
-    // or we construct a m.facebook.com URL from ID
     let scrapeUrl = effectiveUrl;
-    if (extractedId) {
+    // If we have an ID and it's a Reel/Video, prefer that structure
+    if (extractedId && (type === 'mp4' || type === 'mp3')) {
         scrapeUrl = `https://m.facebook.com/reel/${extractedId}/`;
     }
+    // If it's a rewritten post URL, use that directly (it works with Mobile UA)
 
     return await runScraper(scrapeUrl, type, quality, extractedId);
 }
@@ -193,7 +203,6 @@ async function runYtDlp(url, type, quality) {
             });
             return { url: `${BASE_URL}/downloads/${finalFilename}`, filename: finalFilename };
          } else {
-            // MP4
             const finalFilename = formatFilename({ title: rawTitle, type: 'MP4', quality: quality }) + '.mp4';
             const formatSelector = `bestvideo[height<=${parseInt(quality)}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best`;
             await ytdlp.exec(url, {
@@ -209,7 +218,6 @@ async function runYtDlp(url, type, quality) {
 }
 
 async function runScraper(url, type, quality, knownId) {
-    // Use Mobile UA
     const scrapeHeaders = {
         'User-Agent': mobileUserAgent,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -226,33 +234,46 @@ async function runScraper(url, type, quality, knownId) {
     const $ = cheerio.load(data);
     let mediaUrls = [];
 
-    // 1. OG Video
+    // 1. OG Video / Image
     const ogVideo = $('meta[property="og:video"]').attr('content');
     const ogImage = $('meta[property="og:image"]').attr('content');
 
     if ((type === 'mp4' || type === 'mp3') && ogVideo) {
          mediaUrls.push({ url: ogVideo.replace(/&amp;/g, '&'), is_video: true });
-    } else if (type === 'image' && ogImage) {
-         mediaUrls.push({ url: ogImage.replace(/&amp;/g, '&'), is_video: false });
     }
 
-    // 2. Regex Search
+    if (type === 'image') {
+        // A. OG Image
+        if (ogImage) {
+             mediaUrls.push({ url: ogImage.replace(/&amp;/g, '&'), is_video: false });
+        }
+
+        // B. Scan JSON/HTML for more images (Carousel support)
+        const jsonImages = data.match(/"https?:\\?\/\\?\/[^"]*fbcdn[^"]*\.jpg"/g) || [];
+        const uniqueJsonImages = [...new Set(jsonImages.map(m => m.replace(/['"]/g, '').replace(/\\/g, '')))];
+
+        uniqueJsonImages.forEach(imgUrl => {
+            // Filter out small icons/profiles if possible
+            if (!imgUrl.includes('profile') && !imgUrl.includes('emoji') && !mediaUrls.find(m => m.url === imgUrl)) {
+                mediaUrls.push({ url: imgUrl, is_video: false });
+            }
+        });
+    }
+
+    // 2. Regex Search for Video
     if (mediaUrls.length === 0 && (type === 'mp4' || type === 'mp3')) {
         const html = data;
         const patterns = [
             /"playable_url_quality_hd":"([^"]+)"/,
             /"playable_url":"([^"]+)"/,
             /data-video-url="([^"]+)"/,
-            /"video_src",\s*"([^"]+)"/,
-            /https:\\?\/\\?\/[^"']+\.mp4/ // Generic search
+            /"video_src",\s*"([^"]+)"/
         ];
 
         for (const p of patterns) {
             const m = html.match(p);
             if (m) {
-                 // Use first capturing group if exists, else match itself
                  let raw = m[1] || m[0];
-                 // Decode
                  let clean = raw.replace(/\\/g, '');
                  if (clean.startsWith('http')) {
                      mediaUrls.push({ url: clean, is_video: true });
@@ -262,8 +283,8 @@ async function runScraper(url, type, quality, knownId) {
         }
     }
 
-    // 3. Last Resort: Extract ID and retry yt-dlp if we haven't already
-    if (mediaUrls.length === 0 && !knownId) {
+    // 3. Retry yt-dlp if ID found
+    if (mediaUrls.length === 0 && !knownId && (type === 'mp4' || type === 'mp3')) {
         const newId = extractId(url, data);
         if (newId) {
              console.log(`[Facebook] Found ID via scraping: ${newId}. Retrying yt-dlp fallback.`);
@@ -275,7 +296,7 @@ async function runScraper(url, type, quality, knownId) {
         throw new Error('No media found via scraping.');
     }
 
-    // Download matches (Scraper logic)
+    // Process Downloads
     const results = [];
     const rawTitle = $('title').text().trim() || 'facebook_post';
 
