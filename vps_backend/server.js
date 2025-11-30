@@ -162,6 +162,7 @@ try {
         }
 
         try {
+            console.log('Full yt-dlp metadata:', JSON.stringify(metadata, null, 2));
             const rawTitle = metadata.title;
             let finalFilename;
 
@@ -212,8 +213,16 @@ try {
 
             } else { // Single Media Logic
                 if (type === 'image') {
-                    const imageUrl = metadata.thumbnail || metadata.url;
-                    if (!imageUrl) throw new Error('Could not find image URL.');
+                    let imageUrl = metadata.thumbnail || metadata.url;
+                    if (!imageUrl && metadata.formats) {
+                        const imageFormat = metadata.formats.find(f => f.vcodec !== 'none' && f.acodec === 'none');
+                        if (imageFormat) {
+                            imageUrl = imageFormat.url;
+                        }
+                    }
+                    if (!imageUrl) {
+                        throw new Error('Could not find image URL.');
+                    }
                     const extension = path.extname(new URL(imageUrl).pathname) || '.jpg';
                     const baseFilename = formatFilename({ title: rawTitle, type: 'Image', quality: null });
                     finalFilename = `${baseFilename}${extension}`;
