@@ -21,7 +21,7 @@ const commonYtdlpOptions = {
 // Helper to format filenames (matches server.js)
 function formatFilename({ title, type, quality, index = -1 }) {
     const safeTitle = (title || `facebook_download_${uuidv4()}`)
-        .replace(/[<>:"/\\|?*]/g, '_')
+        .replace(/[<>:"/\\|?*#]/g, '_')
         .substring(0, 50);
 
     let qualityString = '';
